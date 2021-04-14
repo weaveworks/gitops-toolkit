@@ -1,27 +1,56 @@
 package filter
 
-// ListOptions is a generic struct for listing options.
-type ListOptions struct {
-	// Filters contains a chain of ListFilters, which will be processed in order and pipe the
-	// available objects through before returning.
-	Filters []ListFilter
+import "sigs.k8s.io/controller-runtime/pkg/client"
+
+// FilterOption is an interface for implementations that know how to
+// mutate FilterOptions.
+type FilterOption interface {
+	// ApplyToFilterOptions applies the configuration of the current object into a target FilterOptions struct.
+	ApplyToFilterOptions(target *FilterOptions)
 }
 
-// ListOption is an interface which can be passed into e.g. List() methods as a variadic-length
-// argument list.
-type ListOption interface {
-	// ApplyToListOptions applies the configuration of the current object into a target ListOptions struct.
-	ApplyToListOptions(target *ListOptions) error
+// FilterOptions is a set of options for filtering. It implements the ObjectFilter interface
+// itself, so it can be used kind of as a multi-ObjectFilter.
+type FilterOptions struct {
+	// ObjectFilters contains a set of filters for a single object. All of the filters must return
+	// true an a nil error for Match(obj) to return (true, nil).
+	ObjectFilters []ObjectFilter
 }
 
-// MakeListOptions makes a completed ListOptions struct from a list of ListOption implementations.
-func MakeListOptions(opts ...ListOption) (*ListOptions, error) {
-	o := &ListOptions{}
-	for _, opt := range opts {
-		// For every option, apply it into o, and check if there's an error
-		if err := opt.ApplyToListOptions(o); err != nil {
-			return nil, err
+// Match matches the object against all the ObjectFilters.
+func (o *FilterOptions) Match(obj client.Object) (bool, error) {
+	for _, filter := range o.ObjectFilters {
+		matched, err := filter.Match(obj)
+		if err != nil {
+			return false, err
+		}
+		if !matched {
+			return false, nil
 		}
 	}
-	return o, nil
+	return true, nil
+}
+
+// ApplyToFilterOptions implements FilterOption
+func (o *FilterOptions) ApplyToFilterOptions(target *FilterOptions) {
+	target.ObjectFilters = append(target.ObjectFilters, o.ObjectFilters...)
+}
+
+// ApplyOptions applies the given FilterOptions to itself and returns itself.
+func (o *FilterOptions) ApplyOptions(opts []FilterOption) *FilterOptions {
+	for _, opt := range opts {
+		opt.ApplyToFilterOptions(o)
+	}
+	return o
+}
+
+// ApplyOption applies one option that aims to implement FilterOption,
+// but at compile-time maybe does not for sure. This can be used for
+// lists of other Options that possibly implement FilterOption in the
+// following way: for _, opt := range opts { filterOpts.ApplyOption(opt) }
+func (o *FilterOptions) ApplyOption(opt interface{}) *FilterOptions {
+	if fOpt, ok := opt.(FilterOption); ok {
+		fOpt.ApplyToFilterOptions(o)
+	}
+	return o
 }

@@ -13,8 +13,8 @@ import (
 	"github.com/spf13/pflag"
 	"github.com/weaveworks/libgitops/cmd/sample-app/apis/sample/v1alpha1"
 	"github.com/weaveworks/libgitops/cmd/sample-app/version"
-	"github.com/weaveworks/libgitops/pkg/runtime"
-	"github.com/weaveworks/libgitops/pkg/storage"
+	"github.com/weaveworks/libgitops/pkg/storage/client"
+	"github.com/weaveworks/libgitops/pkg/storage/core"
 )
 
 var (
@@ -23,10 +23,6 @@ var (
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
-}
-
-func CarKeyForName(name string) storage.ObjectKey {
-	return storage.NewObjectKey(storage.NewKindKey(CarGVK), runtime.NewIdentifier("default/"+name))
 }
 
 func NewCar(name string) *v1alpha1.Car {
@@ -38,17 +34,17 @@ func NewCar(name string) *v1alpha1.Car {
 	return obj
 }
 
-func SetNewCarStatus(s storage.Storage, key storage.ObjectKey) error {
-	obj, err := s.Get(key)
+func SetNewCarStatus(ctx context.Context, c client.Client, name string) error {
+	car := &v1alpha1.Car{}
+	err := c.Get(ctx, core.ObjectKey{Name: name}, car)
 	if err != nil {
 		return err
 	}
 
-	car := obj.(*v1alpha1.Car)
 	car.Status.Distance = rand.Uint64()
 	car.Status.Speed = rand.Float64() * 100
 
-	return s.Update(car)
+	return c.Update(ctx, car)
 }
 
 func ParseVersionFlag() {
@@ -75,8 +71,8 @@ func NewEcho() *echo.Echo {
 func StartEcho(e *echo.Echo) error {
 	// Start the server
 	go func() {
-		if err := e.Start(":8888"); err != nil {
-			e.Logger.Info("shutting down the server")
+		if err := e.Start(":8881"); err != nil {
+			e.Logger.Info("shutting down the server", err)
 		}
 	}()
 

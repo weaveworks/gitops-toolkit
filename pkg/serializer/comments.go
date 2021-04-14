@@ -27,7 +27,7 @@ var (
 func (d *decoder) tryToPreserveComments(doc []byte, obj runtime.Object, ct ContentType) {
 	// If the user opted into preserving comments and the format is YAML, proceed
 	// If they didn't, return directly
-	if !(*d.opts.PreserveComments && ct == ContentTypeYAML) {
+	if !(d.opts.PreserveComments == PreserveCommentsStrict && ct == ContentTypeYAML) {
 		return
 	}
 
@@ -41,7 +41,7 @@ func (d *decoder) tryToPreserveComments(doc []byte, obj runtime.Object, ct Conte
 // tryToPreserveComments tries to locate the possibly-saved original file data in the object's annotation
 func (e *encoder) encodeWithCommentSupport(versionEncoder runtime.Encoder, fw FrameWriter, obj runtime.Object, metaObj metav1.Object) error {
 	// If the user did not opt into preserving comments, just sanitize ObjectMeta temporarily and and return
-	if !*e.opts.PreserveComments {
+	if e.opts.PreserveComments == PreserveCommentsDisable {
 		// Normal encoding without the annotation (so it doesn't leak by accident)
 		return noAnnotationWrapper(metaObj, e.normalEncodeFunc(versionEncoder, fw, obj))
 	}

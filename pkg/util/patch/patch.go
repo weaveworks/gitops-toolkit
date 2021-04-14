@@ -1,103 +1,88 @@
 package patch
 
 import (
-	"bytes"
+	"encoding/json"
 	"fmt"
-	"io/ioutil"
 
-	"github.com/weaveworks/libgitops/pkg/runtime"
-	"github.com/weaveworks/libgitops/pkg/serializer"
-	"k8s.io/apimachinery/pkg/runtime/schema"
+	jsonbytepatcher "github.com/evanphx/json-patch"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
 )
 
-type Patcher interface {
-	Create(new runtime.Object, applyFn func(runtime.Object) error) ([]byte, error)
-	Apply(original, patch []byte, gvk schema.GroupVersionKind) ([]byte, error)
-	ApplyOnFile(filePath string, patch []byte, gvk schema.GroupVersionKind) error
+// BytePatcherForType returns the right BytePatcher for the given
+// patch type.
+//
+// Note: if patchType is unknown, the return value will be nil, so make
+// sure you check the BytePatcher is non-nil before using it!
+func BytePatcherForType(patchType types.PatchType) BytePatcher {
+	switch patchType {
+	case types.JSONPatchType:
+		return JSONBytePatcher{}
+	case types.MergePatchType:
+		return MergeBytePatcher{}
+	case types.StrategicMergePatchType:
+		return StrategicMergeBytePatcher{}
+	default:
+		return nil
+	}
 }
 
-func NewPatcher(s serializer.Serializer) Patcher {
-	return &patcher{serializer: s}
+// maximum number of operations a single json patch may contain.
+const maxJSONBytePatcherOperations = 10000
+
+type BytePatcher interface {
+	// TODO: SupportedType() types.PatchType
+	// currentData must be versioned bytes of the same GVK as into and patch.Data() (if merge patch)
+	// into must be an empty object
+	Apply(currentJSON, patchJSON []byte, schema strategicpatch.LookupPatchMeta) ([]byte, error)
 }
 
-type patcher struct {
-	serializer serializer.Serializer
-}
+type JSONBytePatcher struct{}
 
-// Create is a helper that creates a patch out of the change made in applyFn
-func (p *patcher) Create(new runtime.Object, applyFn func(runtime.Object) error) (patchBytes []byte, err error) {
-	var oldBytes, newBytes bytes.Buffer
-	encoder := p.serializer.Encoder()
-	old := new.DeepCopyObject().(runtime.Object)
-
-	if err = encoder.Encode(serializer.NewJSONFrameWriter(&oldBytes), old); err != nil {
-		return
+func (JSONBytePatcher) Apply(currentJSON, patchJSON []byte, _ strategicpatch.LookupPatchMeta) ([]byte, error) {
+	// sanity check potentially abusive patches
+	// TODO(liggitt): drop this once golang json parser limits stack depth (https://github.com/golang/go/issues/31789)
+	// TODO(luxas): Go v1.15 has the above mentioned patch, what needs changing now?
+	if len(patchJSON) > 1024*1024 {
+		v := []interface{}{}
+		if err := json.Unmarshal(patchJSON, &v); err != nil {
+			return nil, fmt.Errorf("error decoding patch: %v", err)
+		}
 	}
 
-	if err = applyFn(new); err != nil {
-		return
-	}
-
-	if err = encoder.Encode(serializer.NewJSONFrameWriter(&newBytes), new); err != nil {
-		return
-	}
-
-	emptyObj, err := p.serializer.Scheme().New(old.GetObjectKind().GroupVersionKind())
-	if err != nil {
-		return
-	}
-
-	patchBytes, err = strategicpatch.CreateTwoWayMergePatch(oldBytes.Bytes(), newBytes.Bytes(), emptyObj)
-	if err != nil {
-		return nil, fmt.Errorf("CreateTwoWayMergePatch failed: %v", err)
-	}
-
-	return patchBytes, nil
-}
-
-func (p *patcher) Apply(original, patch []byte, gvk schema.GroupVersionKind) ([]byte, error) {
-	emptyObj, err := p.serializer.Scheme().New(gvk)
+	patchObj, err := jsonbytepatcher.DecodePatch(patchJSON)
 	if err != nil {
 		return nil, err
 	}
-
-	b, err := strategicpatch.StrategicMergePatch(original, patch, emptyObj)
-	if err != nil {
-		return nil, err
+	if len(patchObj) > maxJSONBytePatcherOperations {
+		return nil, errors.NewRequestEntityTooLargeError(
+			fmt.Sprintf("The allowed maximum operations in a JSON patch is %d, got %d",
+				maxJSONBytePatcherOperations, len(patchObj)))
 	}
-
-	return p.serializerEncode(b)
+	return patchObj.Apply(currentJSON)
 }
 
-func (p *patcher) ApplyOnFile(filePath string, patch []byte, gvk schema.GroupVersionKind) error {
-	oldContent, err := ioutil.ReadFile(filePath)
-	if err != nil {
-		return err
+type MergeBytePatcher struct{}
+
+func (MergeBytePatcher) Apply(currentJSON, patchJSON []byte, _ strategicpatch.LookupPatchMeta) ([]byte, error) {
+	// sanity check potentially abusive patches
+	// TODO(liggitt): drop this once golang json parser limits stack depth (https://github.com/golang/go/issues/31789)
+	// TODO(luxas): Go v1.15 has the above mentioned patch, what needs changing now?
+	if len(patchJSON) > 1024*1024 {
+		v := map[string]interface{}{}
+		if err := json.Unmarshal(patchJSON, &v); err != nil {
+			return nil, errors.NewBadRequest(fmt.Sprintf("error decoding patch: %v", err))
+		}
 	}
 
-	newContent, err := p.Apply(oldContent, patch, gvk)
-	if err != nil {
-		return err
-	}
-
-	return ioutil.WriteFile(filePath, newContent, 0644)
+	return jsonbytepatcher.MergePatch(currentJSON, patchJSON)
 }
 
-// StrategicMergePatch returns an unindented, unorganized JSON byte slice,
-// this helper takes that as an input and returns the same JSON re-encoded
-// with the serializer so it conforms to a runtime.Object
-// TODO: Just use encoding/json.Indent here instead?
-func (p *patcher) serializerEncode(input []byte) ([]byte, error) {
-	obj, err := p.serializer.Decoder().Decode(serializer.NewJSONFrameReader(serializer.FromBytes(input)))
-	if err != nil {
-		return nil, err
-	}
+type StrategicMergeBytePatcher struct{}
 
-	var result bytes.Buffer
-	if err := p.serializer.Encoder().Encode(serializer.NewJSONFrameWriter(&result), obj); err != nil {
-		return nil, err
-	}
-
-	return result.Bytes(), err
+func (StrategicMergeBytePatcher) Apply(currentJSON, patchJSON []byte, schema strategicpatch.LookupPatchMeta) ([]byte, error) {
+	// TODO: Also check for overflow here?
+	// TODO: What to do when schema is nil? error?
+	return strategicpatch.StrategicMergePatchUsingLookupPatchMeta(currentJSON, patchJSON, schema)
 }

@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/runtime/serializer/json"
@@ -92,6 +93,7 @@ func Test_FrameReader_ReadFrame(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			rf := &frameReader{
 				rc:           tt.fields.rc,
+				rcMu:         &sync.Mutex{},
 				bufSize:      tt.fields.bufSize,
 				maxFrameSize: tt.fields.maxFrameSize,
 			}

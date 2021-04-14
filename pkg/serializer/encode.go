@@ -1,73 +1,36 @@
 package serializer
 
 import (
-	"github.com/sirupsen/logrus"
-	"github.com/weaveworks/libgitops/pkg/util"
+	"bytes"
+	"encoding/json"
+	"strings"
+
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	k8sserializer "k8s.io/apimachinery/pkg/runtime/serializer"
 )
 
-type EncodingOptions struct {
-	// Use pretty printing when writing to the output. (Default: true)
-	// TODO: Fix that sometimes omitempty fields aren't respected
-	Pretty *bool
-	// Whether to preserve YAML comments internally. This only works for objects embedding metav1.ObjectMeta.
-	// Only applicable to ContentTypeYAML framers.
-	// Using any other framer will be silently ignored. Usage of this option also requires setting
-	// the PreserveComments in DecodingOptions, too. (Default: false)
-	// TODO: Make this a BestEffort & Strict mode
-	PreserveComments *bool
-
-	// TODO: Maybe consider an option to always convert to the preferred version (not just internal)
-}
-
-type EncodingOptionsFunc func(*EncodingOptions)
-
-func WithPrettyEncode(pretty bool) EncodingOptionsFunc {
-	return func(opts *EncodingOptions) {
-		opts.Pretty = &pretty
+func NewEncoder(schemeLock LockedScheme, codecs *k8sserializer.CodecFactory, opts ...EncodeOption) Encoder {
+	return &encoder{
+		LockedScheme: schemeLock,
+		codecs:       codecs,
+		opts:         *defaultEncodeOpts().ApplyOptions(opts),
 	}
-}
-
-func WithCommentsEncode(comments bool) EncodingOptionsFunc {
-	return func(opts *EncodingOptions) {
-		opts.PreserveComments = &comments
-	}
-}
-
-func WithEncodingOptions(newOpts EncodingOptions) EncodingOptionsFunc {
-	return func(opts *EncodingOptions) {
-		// TODO: Null-check all of these before using them
-		*opts = newOpts
-	}
-}
-
-func defaultEncodeOpts() *EncodingOptions {
-	return &EncodingOptions{
-		Pretty:           util.BoolPtr(true),
-		PreserveComments: util.BoolPtr(false),
-	}
-}
-
-func newEncodeOpts(fns ...EncodingOptionsFunc) *EncodingOptions {
-	opts := defaultEncodeOpts()
-	for _, fn := range fns {
-		fn(opts)
-	}
-	return opts
 }
 
 type encoder struct {
-	*schemeAndCodec
+	LockedScheme
+	codecs *k8sserializer.CodecFactory
 
-	opts EncodingOptions
+	opts EncodeOptions
 }
 
-func newEncoder(schemeAndCodec *schemeAndCodec, opts EncodingOptions) Encoder {
-	return &encoder{
-		schemeAndCodec,
-		opts,
-	}
+func (e *encoder) GetLockedScheme() LockedScheme {
+	return e.LockedScheme
+}
+
+func (e *encoder) CodecFactory() *k8sserializer.CodecFactory {
+	return e.codecs
 }
 
 // Encode encodes the given objects and writes them to the specified FrameWriter.
@@ -75,17 +38,18 @@ func newEncoder(schemeAndCodec *schemeAndCodec, opts EncodingOptions) Encoder {
 // internal object given to the preferred external groupversion. No conversion will happen
 // if the given object is of an external version.
 // TODO: This should automatically convert to the preferred version
+// TODO: Fix that sometimes omitempty fields aren't respected
 func (e *encoder) Encode(fw FrameWriter, objs ...runtime.Object) error {
 	for _, obj := range objs {
 		// Get the kind for the given object
-		gvk, err := GVKForObject(e.scheme, obj)
+		gvk, err := GVKForObject(e.Scheme(), obj)
 		if err != nil {
 			return err
 		}
 
 		// If the object is internal, convert it to the preferred external one
 		if gvk.Version == runtime.APIVersionInternal {
-			gv, err := prioritizedVersionForGroup(e.scheme, gvk.Group)
+			gv, err := PreferredVersionForGroup(e.Scheme(), gvk.Group)
 			if err != nil {
 				return err
 			}
@@ -110,22 +74,22 @@ func (e *encoder) EncodeForGroupVersion(fw FrameWriter, obj runtime.Object, gv s
 		return ErrUnsupportedContentType
 	}
 
-	// Choose the pretty or non-pretty one
+	// Choose the default, non-pretty serializer, as we prettify if needed later
+	// We technically could use the JSON PrettySerializer here, but it does not catch the
+	// cases where the JSON iterator invokes MarshalJSON() on an object, and that object
+	// returns non-pretty bytes (e.g. *unstructured.Unstructured). Hence, it is more robust
+	// and extensible to always use the non-pretty serializer, and only on request indent
+	// a given number of spaces after JSON encoding.
 	encoder := serializerInfo.Serializer
 
-	// Use the pretty serializer if it was asked for and is defined for the content type
-	if *e.opts.Pretty {
-		// Apparently not all SerializerInfos have this field defined (e.g. YAML)
-		// TODO: This could be considered a bug in upstream, create an issue
-		if serializerInfo.PrettySerializer != nil {
-			encoder = serializerInfo.PrettySerializer
-		} else {
-			logrus.Debugf("PrettySerializer for ContentType %s is nil, falling back to Serializer.", fw.ContentType())
-		}
-	}
-
 	// Get a version-specific encoder for the specified groupversion
-	versionEncoder := encoderForVersion(e.scheme, encoder, gv)
+	versionEncoder := encoderForVersion(e.Scheme(), encoder, gv)
+
+	// Check if the user requested prettified JSON output.
+	// If the ContentType is JSON this is ok, we will intent the encode output on the fly.
+	if *e.opts.JSONIndent > 0 && fw.ContentType() == ContentTypeJSON {
+		fw = &jsonPrettyFrameWriter{indent: *e.opts.JSONIndent, fw: fw}
+	}
 
 	// Cast the object to a metav1.Object to get access to annotations
 	metaobj, ok := toMetaObject(obj)
@@ -149,4 +113,25 @@ func encoderForVersion(scheme *runtime.Scheme, encoder runtime.Encoder, gv schem
 		false,   // no defaulting
 		true,    // convert if needed before encode
 	)
+}
+
+type jsonPrettyFrameWriter struct {
+	indent int32
+	fw     FrameWriter
+}
+
+func (w *jsonPrettyFrameWriter) Write(p []byte) (n int, err error) {
+	// Indent the source bytes
+	var indented bytes.Buffer
+	err = json.Indent(&indented, p, "", strings.Repeat(" ", int(w.indent)))
+	if err != nil {
+		return
+	}
+	// Write the pretty bytes to the underlying writer
+	n, err = w.fw.Write(indented.Bytes())
+	return
+}
+
+func (w *jsonPrettyFrameWriter) ContentType() ContentType {
+	return w.fw.ContentType()
 }

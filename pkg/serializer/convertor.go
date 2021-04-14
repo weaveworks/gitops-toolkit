@@ -19,17 +19,23 @@ var (
 	errObjMustNotBeBoth   = errors.New("given object must not implement both the Convertible and Hub interfaces")
 )
 
-func newConverter(scheme *runtime.Scheme) *converter {
+func NewConverter(schemeLock LockedScheme) *converter {
 	return &converter{
-		scheme:    scheme,
-		convertor: newObjectConvertor(scheme, true),
+		LockedScheme: schemeLock,
+		convertor:    newObjectConvertor(schemeLock.Scheme(), true),
 	}
 }
 
 // converter implements the Converter interface
+// TODO: This implementation should support converting from a
+// convertible to an other convertible through the Hub
 type converter struct {
-	scheme    *runtime.Scheme
+	LockedScheme
 	convertor *objectConvertor
+}
+
+func (c *converter) GetLockedScheme() LockedScheme {
+	return c.LockedScheme
 }
 
 // Convert converts in directly into out. out should be an empty object of the destination type.
@@ -46,7 +52,7 @@ func (c *converter) Convert(in, out runtime.Object) error {
 // TODO: If needed, this function could only accept a GroupVersion, not GroupVersionKind
 func (c *converter) ConvertIntoNew(in runtime.Object, gvk schema.GroupVersionKind) (runtime.Object, error) {
 	// Create a new object of the given gvk
-	obj, err := c.scheme.New(gvk)
+	obj, err := c.Scheme().New(gvk)
 	if err != nil {
 		return nil, err
 	}
@@ -169,7 +175,8 @@ func (c *objectConvertor) ConvertToVersion(in runtime.Object, groupVersioner run
 	// as before, using the scheme's ConvertToVersion function. But if we don't want to convert the newly-decoded
 	// external object, we can just do nothing and the object will stay unconverted.
 	// doConversion is always true in the Encode codepath.
-	if !c.doConversion {
+	// Also, never convert unknown, partial metadata or unstructured objects (defined as "non-convertible").
+	if !c.doConversion || IsNonConvertible(in) {
 		// DeepCopy the object to make sure that although in would be somehow modified, it doesn't affect out
 		return in.DeepCopyObject(), nil
 	}

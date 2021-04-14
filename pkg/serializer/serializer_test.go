@@ -21,8 +21,8 @@ var (
 	codecs         = k8sserializer.NewCodecFactory(scheme)
 	ourserializer  = NewSerializer(scheme, &codecs)
 	defaultEncoder = ourserializer.Encoder(
-		WithPrettyEncode(false), // TODO: Also test the pretty serializer
-		WithCommentsEncode(true),
+		PrettyEncode(false), // TODO: Also test the pretty serializer
+		PreserveCommentsStrict,
 	)
 
 	groupname = "foogroup"
@@ -402,8 +402,8 @@ func TestDecode(t *testing.T) {
 	for _, rt := range tests {
 		t.Run(rt.name, func(t2 *testing.T) {
 			obj, actual := ourserializer.Decoder(
-				WithDefaultsDecode(rt.doDefaulting),
-				WithConvertToHubDecode(rt.doConversion),
+				DefaultAtDecode(rt.doDefaulting),
+				ConvertToHub(rt.doConversion),
 			).Decode(NewYAMLFrameReader(FromBytes(rt.data)))
 			if (actual != nil) != rt.expectedErr {
 				t2.Errorf("expected error %t but actual %t: %v", rt.expectedErr, actual != nil, actual)
@@ -444,7 +444,7 @@ func TestDecodeInto(t *testing.T) {
 		t.Run(rt.name, func(t2 *testing.T) {
 
 			actual := ourserializer.Decoder(
-				WithDefaultsDecode(rt.doDefaulting),
+				DefaultAtDecode(rt.doDefaulting),
 			).DecodeInto(NewYAMLFrameReader(FromBytes(rt.data)), rt.obj)
 			if (actual != nil) != rt.expectedErr {
 				t2.Errorf("expected error %t but actual %t: %v", rt.expectedErr, actual != nil, actual)
@@ -484,8 +484,8 @@ func TestDecodeAll(t *testing.T) {
 	for _, rt := range tests {
 		t.Run(rt.name, func(t2 *testing.T) {
 			objs, actual := ourserializer.Decoder(
-				WithDefaultsDecode(rt.doDefaulting),
-				WithListElementsDecoding(rt.listSplit),
+				DefaultAtDecode(rt.doDefaulting),
+				DecodeListElements(rt.listSplit),
 			).DecodeAll(NewYAMLFrameReader(FromBytes(rt.data)))
 			if (actual != nil) != rt.expectedErr {
 				t2.Errorf("expected error %t but actual %t: %v", rt.expectedErr, actual != nil, actual)
@@ -527,7 +527,7 @@ func TestDecodeUnknown(t *testing.T) {
 	for _, rt := range tests {
 		t.Run(rt.name, func(t2 *testing.T) {
 			obj, actual := ourserializer.Decoder(
-				WithUnknownDecode(rt.unknown),
+				DecodeUnknown(rt.unknown),
 			).Decode(NewYAMLFrameReader(FromBytes(rt.data)))
 			if (actual != nil) != rt.expectedErr {
 				t2.Errorf("expected error %t but actual %t: %v", rt.expectedErr, actual != nil, actual)
@@ -560,9 +560,9 @@ func TestRoundtrip(t *testing.T) {
 	for _, rt := range tests {
 		t.Run(rt.name, func(t2 *testing.T) {
 			obj, err := ourserializer.Decoder(
-				WithConvertToHubDecode(true),
-				WithCommentsDecode(true),
-				WithUnknownDecode(true),
+				ConvertToHub(true),
+				PreserveCommentsStrict,
+				DecodeUnknown(true),
 			).Decode(NewYAMLFrameReader(FromBytes(rt.data)))
 			if err != nil {
 				t2.Errorf("unexpected decode error: %v", err)

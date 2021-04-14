@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"sync"
 
 	"k8s.io/apimachinery/pkg/runtime/serializer/json"
 )
@@ -37,11 +38,22 @@ type FrameReader interface {
 	ReadFrame() ([]byte, error)
 }
 
-// NewFrameReader returns a FrameReader for the given ContentType and data in the
-// ReadCloser. The Reader is automatically closed in io.EOF. ReadFrame is called
-// once each Decoder.Decode() or Decoder.DecodeInto() call. When Decoder.DecodeAll() is
-// called, the FrameReader is read until io.EOF, upon where it is closed.
-func NewFrameReader(contentType ContentType, rc ReadCloser) FrameReader {
+// FrameReaderFactory knows how to create various different FrameReaders for
+// given ContentTypes.
+type FrameReaderFactory interface {
+	// NewFrameReader returns a new FrameReader for the given ContentType,
+	// and ReadCloser that contains the underlying data that should be read.
+	NewFrameReader(contentType ContentType, rc ReadCloser) FrameReader
+}
+
+// defaultFrameReaderFactory is the variable used in public methods.
+var defaultFrameReaderFactory FrameReaderFactory = frameReaderFactory{}
+
+// frameReaderFactory is the default implementation of FrameReaderFactory.
+type frameReaderFactory struct{}
+
+// Documentation below attached to NewFrameReader.
+func (frameReaderFactory) NewFrameReader(contentType ContentType, rc ReadCloser) FrameReader {
 	switch contentType {
 	case ContentTypeYAML:
 		return newFrameReader(json.YAMLFramer.NewFrameReader(rc), contentType)
@@ -50,6 +62,20 @@ func NewFrameReader(contentType ContentType, rc ReadCloser) FrameReader {
 	default:
 		return &errFrameReader{ErrUnsupportedContentType, contentType}
 	}
+}
+
+// NewFrameReaderFactory returns the default variant of FrameReaderFactory capable
+// of creating YAML- and JSON-compatible FrameReaders.
+func NewFrameReaderFactory() FrameReaderFactory {
+	return frameReaderFactory{}
+}
+
+// NewFrameReader returns a FrameReader for the given ContentType and data in the
+// ReadCloser. The Reader is automatically closed in io.EOF. ReadFrame is called
+// once each Decoder.Decode() or Decoder.DecodeInto() call. When Decoder.DecodeAll() is
+// called, the FrameReader is read until io.EOF, upon where it is closed.
+func NewFrameReader(contentType ContentType, rc ReadCloser) FrameReader {
+	return defaultFrameReaderFactory.NewFrameReader(contentType, rc)
 }
 
 // NewYAMLFrameReader returns a FrameReader that supports both YAML and JSON. Frames are separated by "---\n"
@@ -71,6 +97,7 @@ func NewJSONFrameReader(rc ReadCloser) FrameReader {
 func newFrameReader(rc io.ReadCloser, contentType ContentType) *frameReader {
 	return &frameReader{
 		rc:           rc,
+		rcMu:         &sync.Mutex{},
 		bufSize:      defaultBufSize,
 		maxFrameSize: defaultMaxFrameSize,
 		contentType:  contentType,
@@ -79,12 +106,13 @@ func newFrameReader(rc io.ReadCloser, contentType ContentType) *frameReader {
 
 // frameReader is a FrameReader implementation
 type frameReader struct {
-	rc           io.ReadCloser
+	// the underlying readcloser and the mutex that guards it
+	rc   io.ReadCloser
+	rcMu *sync.Mutex
+
 	bufSize      int
 	maxFrameSize int
 	contentType  ContentType
-
-	// TODO: Maybe add mutexes for thread-safety (so no two goroutines read at the same time)
 }
 
 // ReadFrame reads one frame from the underlying io.Reader. ReadFrame
@@ -93,6 +121,10 @@ type frameReader struct {
 // ReadFrame keeps on reading using new calls. ReadFrame might return both data and
 // io.EOF. io.EOF will be returned in the final call.
 func (rf *frameReader) ReadFrame() (frame []byte, err error) {
+	// Only one actor can read at a time
+	rf.rcMu.Lock()
+	defer rf.rcMu.Unlock()
+
 	// Temporary buffer to parts of a frame into
 	var buf []byte
 	// How many bytes were read by the read call
@@ -149,6 +181,10 @@ func (rf *frameReader) ContentType() ContentType {
 
 // Close implements io.Closer and closes the underlying ReadCloser
 func (rf *frameReader) Close() error {
+	// Only one actor can access rf.rc at a time
+	rf.rcMu.Lock()
+	defer rf.rcMu.Unlock()
+
 	return rf.rc.Close()
 }
 

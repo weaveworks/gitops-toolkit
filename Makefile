@@ -1,5 +1,5 @@
 UID_GID ?= $(shell id -u):$(shell id -g)
-GO_VERSION ?= 1.14.4
+GO_VERSION ?= 1.15.6
 GIT_VERSION := $(shell hack/ldflags.sh --version-only)
 PROJECT := github.com/weaveworks/libgitops
 BOUNDING_API_DIRS := ${PROJECT}/cmd/apis/sample
@@ -7,7 +7,6 @@ API_DIRS := ${PROJECT}/cmd/sample-app/apis/sample,${PROJECT}/cmd/sample-app/apis
 SRC_PKGS := cmd pkg
 DOCKER_ARGS := --rm
 CACHE_DIR := $(shell pwd)/bin/cache
-API_DOCS := api/sample-app.md api/runtime.md
 BINARIES := bin/sample-app bin/sample-gitops bin/sample-watch
 
 # If we're not running in CI, run Docker interactively
@@ -39,7 +38,6 @@ test-internal:
 tidy: docker-tidy-internal
 tidy-internal: /go/bin/goimports
 	go mod tidy
-	hack/generate-client.sh
 	gofmt -s -w ${SRC_PKGS}
 	goimports -w ${SRC_PKGS}
 

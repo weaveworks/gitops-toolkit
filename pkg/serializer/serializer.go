@@ -2,7 +2,6 @@ package serializer
 
 import (
 	"errors"
-	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -22,14 +21,20 @@ const (
 	ContentTypeYAML = ContentType(runtime.ContentTypeYAML)
 )
 
-// ErrUnsupportedContentType is returned if the specified content type isn't supported
-var ErrUnsupportedContentType = errors.New("unsupported content type")
+var (
+	// ErrUnsupportedContentType is returned if the specified content type isn't supported
+	ErrUnsupportedContentType = errors.New("unsupported content type")
+	// ErrObjectIsNotList is returned when a runtime.Object was not a List type
+	ErrObjectIsNotList = errors.New("given runtime.Object is not a *List type, or does not implement metav1.ListInterface")
+)
 
 // ContentTyped is an interface for objects that are specific to a set ContentType.
 type ContentTyped interface {
 	// ContentType returns the ContentType (usually ContentTypeYAML or ContentTypeJSON) for the given object.
 	ContentType() ContentType
 }
+
+func (ct ContentType) ContentType() ContentType { return ct }
 
 // Serializer is an interface providing high-level decoding/encoding functionality
 // for types registered in a *runtime.Scheme
@@ -38,13 +43,13 @@ type Serializer interface {
 	// a FrameWriter. The decoder can be customized by passing some options (e.g. WithDecodingOptions)
 	// to this call.
 	// The decoder supports both "classic" API Machinery objects and controller-runtime CRDs
-	Decoder(optsFn ...DecodingOptionsFunc) Decoder
+	Decoder(optsFn ...DecodeOption) Decoder
 
 	// Encoder is a high-level interface for encoding Kubernetes API Machinery objects and writing them
 	// to a FrameWriter. The encoder can be customized by passing some options (e.g. WithEncodingOptions)
 	// to this call.
 	// The encoder supports both "classic" API Machinery objects and controller-runtime CRDs
-	Encoder(optsFn ...EncodingOptionsFunc) Encoder
+	Encoder(optsFn ...EncodeOption) Encoder
 
 	// Converter is a high-level interface for converting objects between different versions
 	// The converter supports both "classic" API Machinery objects and controller-runtime CRDs
@@ -53,18 +58,16 @@ type Serializer interface {
 	// Defaulter is a high-level interface for accessing defaulting functions in a scheme
 	Defaulter() Defaulter
 
-	// Scheme provides access to the underlying runtime.Scheme, may be used for low-level access to
-	// the "type universe" and advanced conversion/defaulting features
-	Scheme() *runtime.Scheme
+	Patcher() Patcher
 
-	// Codecs provides access to the underlying serializer.CodecFactory, may be used if low-level access
-	// is needed for encoding and decoding
-	Codecs() *k8sserializer.CodecFactory
-}
+	// SchemeLock exposes the underlying LockedScheme.
+	// A Scheme provides access to the underlying runtime.Scheme, may be used for low-level access to
+	// the "type universe" and advanced conversion/defaulting features.
+	GetLockedScheme() LockedScheme
 
-type schemeAndCodec struct {
-	scheme *runtime.Scheme
-	codecs *k8sserializer.CodecFactory
+	// CodecFactory provides access to the underlying CodecFactory, may be used if low-level access
+	// is needed for encoding and decoding.
+	CodecFactory() *k8sserializer.CodecFactory
 }
 
 // Encoder is a high-level interface for encoding Kubernetes API Machinery objects and writing them
@@ -80,6 +83,12 @@ type Encoder interface {
 	// is not of that version currently it will try to convert. The output bytes are written to the
 	// FrameWriter. The FrameWriter specifies the ContentType.
 	EncodeForGroupVersion(fw FrameWriter, obj runtime.Object, gv schema.GroupVersion) error
+
+	// SchemeLock exposes the underlying LockedScheme
+	GetLockedScheme() LockedScheme
+
+	// CodecFactory exposes the underlying CodecFactory
+	CodecFactory() *k8sserializer.CodecFactory
 }
 
 // Decoder is a high-level interface for decoding Kubernetes API Machinery objects read from
@@ -138,6 +147,9 @@ type Decoder interface {
 	// If opts.DecodeUnknown is true, any type with an unrecognized apiVersion/kind will be returned as a
 	// 	*runtime.Unknown object instead of returning a UnrecognizedTypeError.
 	DecodeAll(fr FrameReader) ([]runtime.Object, error)
+
+	// SchemeLock exposes the underlying LockedScheme
+	GetLockedScheme() LockedScheme
 }
 
 // Converter is an interface that allows access to object conversion capabilities
@@ -157,6 +169,9 @@ type Converter interface {
 	// or the sigs.k8s.io/controller-runtime/pkg/conversion.Hub for the given conversion.Convertible object in
 	// the "in" argument. No defaulting is performed.
 	ConvertToHub(in runtime.Object) (runtime.Object, error)
+
+	// SchemeLock exposes the underlying LockedScheme
+	GetLockedScheme() LockedScheme
 }
 
 // Defaulter is a high-level interface for accessing defaulting functions in a scheme
@@ -172,6 +187,9 @@ type Defaulter interface {
 	// scheme.Default(obj), but with extra logic to cover also internal versions.
 	// Important to note here is that the TypeMeta information is NOT applied automatically.
 	NewDefaultedObject(gvk schema.GroupVersionKind) (runtime.Object, error)
+
+	// SchemeLock exposes the underlying LockedScheme
+	GetLockedScheme() LockedScheme
 }
 
 // NewSerializer constructs a new serializer based on a scheme, and optionally a codecfactory
@@ -186,43 +204,43 @@ func NewSerializer(scheme *runtime.Scheme, codecs *k8sserializer.CodecFactory) S
 		*codecs = k8sserializer.NewCodecFactory(scheme)
 	}
 
+	schemeLock := newLockedScheme(scheme)
+
 	return &serializer{
-		schemeAndCodec: &schemeAndCodec{
-			scheme: scheme,
-			codecs: codecs,
-		},
-		converter: newConverter(scheme),
-		defaulter: newDefaulter(scheme),
+		LockedScheme: schemeLock,
+		codecs:       codecs,
+		converter:    NewConverter(schemeLock),
+		defaulter:    NewDefaulter(schemeLock),
+		patcher: NewPatcher(
+			NewEncoder(schemeLock, codecs, PrettyEncode(true)),
+			NewDecoder(schemeLock),
+		),
 	}
 }
 
 // serializer implements the Serializer interface
 type serializer struct {
-	*schemeAndCodec
+	LockedScheme
+	codecs    *k8sserializer.CodecFactory
 	converter *converter
-	defaulter *defaulter
+	defaulter Defaulter
+	patcher   Patcher
 }
 
-// Scheme provides access to the underlying runtime.Scheme, may be used for low-level access to
-// the "type universe" and advanced conversion/defaulting features
-func (s *serializer) Scheme() *runtime.Scheme {
-	return s.scheme
+func (s *serializer) GetLockedScheme() LockedScheme {
+	return s.LockedScheme
 }
 
-// Codecs provides access to the underlying serializer.CodecFactory, may be used if low-level access
-// is needed for encoding and decoding
-func (s *serializer) Codecs() *k8sserializer.CodecFactory {
+func (s *serializer) CodecFactory() *k8sserializer.CodecFactory {
 	return s.codecs
 }
 
-func (s *serializer) Decoder(optFns ...DecodingOptionsFunc) Decoder {
-	opts := newDecodeOpts(optFns...)
-	return newDecoder(s.schemeAndCodec, *opts)
+func (s *serializer) Decoder(opts ...DecodeOption) Decoder {
+	return NewDecoder(s.LockedScheme, opts...)
 }
 
-func (s *serializer) Encoder(optFns ...EncodingOptionsFunc) Encoder {
-	opts := newEncodeOpts(optFns...)
-	return newEncoder(s.schemeAndCodec, *opts)
+func (s *serializer) Encoder(opts ...EncodeOption) Encoder {
+	return NewEncoder(s.LockedScheme, s.codecs, opts...)
 }
 
 func (s *serializer) Converter() Converter {
@@ -233,32 +251,6 @@ func (s *serializer) Defaulter() Defaulter {
 	return s.defaulter
 }
 
-func prioritizedVersionForGroup(scheme *runtime.Scheme, groupName string) (schema.GroupVersion, error) {
-	// Get the prioritized versions for the given group
-	gvs := scheme.PrioritizedVersionsForGroup(groupName)
-	if len(gvs) < 1 {
-		return schema.GroupVersion{}, fmt.Errorf("expected some version to be registered for group %s", groupName)
-	}
-	// Use the first, preferred, (external) version
-	return gvs[0], nil
-}
-
-func GVKForObject(scheme *runtime.Scheme, obj runtime.Object) (schema.GroupVersionKind, error) {
-	// If we already have TypeMeta filled in here, just use it
-	// TODO: This is probably not needed
-	gvk := obj.GetObjectKind().GroupVersionKind()
-	if !gvk.Empty() {
-		return gvk, nil
-	}
-
-	// TODO: If there are two GVKs returned, it's probably a misconfiguration in the scheme
-	// It might be expected though, and we can tolerate setting the GVK manually IFF there are more than
-	// one ObjectKind AND the given GVK is one of them.
-
-	// Get the possible kinds for the object
-	gvks, unversioned, err := scheme.ObjectKinds(obj)
-	if unversioned || err != nil || len(gvks) != 1 {
-		return schema.GroupVersionKind{}, fmt.Errorf("unversioned %t or err %v or invalid gvks %v", unversioned, err, gvks)
-	}
-	return gvks[0], nil
+func (s *serializer) Patcher() Patcher {
+	return s.patcher
 }
