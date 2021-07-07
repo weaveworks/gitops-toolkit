@@ -7,7 +7,6 @@ import (
 	api "github.com/weaveworks/libgitops/cmd/sample-app/apis/sample"
 	"github.com/weaveworks/libgitops/cmd/sample-app/apis/sample/scheme"
 	"github.com/weaveworks/libgitops/pkg/runtime"
-	"github.com/weaveworks/libgitops/pkg/serializer"
 	"github.com/weaveworks/libgitops/pkg/serializer/frame"
 )
 
@@ -54,7 +53,7 @@ func TestApplyPatch(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	frameReader := serializer.NewJSONFrameReader(frame.FromBytes(result))
+	frameReader := frame.NewJSONReader(frame.FromBytes(result))
 	if err := scheme.Serializer.Decoder().DecodeInto(frameReader, &api.Car{}); err != nil {
 		t.Fatal(err)
 	}
