@@ -1,5 +1,5 @@
 UID_GID ?= $(shell id -u):$(shell id -g)
-GO_VERSION ?= 1.14.4
+GO_VERSION ?= 1.16.5
 GIT_VERSION := $(shell hack/ldflags.sh --version-only)
 PROJECT := github.com/weaveworks/libgitops
 BOUNDING_API_DIRS := ${PROJECT}/cmd/apis/sample
