@@ -220,7 +220,7 @@ var defaultTestCases = []testcase{
 			{ct: ContentTypeJSON, rawData: testJSON},
 		},
 		readOpts:    []ReaderOption{&ReaderWriterOptions{MaxFrameSize: testYAMLlen - 1}},
-		readResults: []error{FrameSizeOverflowErr},
+		readResults: []error{ErrFrameSizeOverflow},
 	},
 	{
 		name: "YAML Read: the frame is out of bounds, but continues on the next line",
@@ -228,7 +228,7 @@ var defaultTestCases = []testcase{
 			{ct: ContentTypeYAML, rawData: testYAML + testYAML},
 		},
 		readOpts:    []ReaderOption{&ReaderWriterOptions{MaxFrameSize: testYAMLlen}},
-		readResults: []error{FrameSizeOverflowErr},
+		readResults: []error{ErrFrameSizeOverflow},
 	},
 	{
 		name: "Read: first frame ok, then frame overflow, then ErrClosedPipe when CloseOnError == true",
@@ -237,7 +237,7 @@ var defaultTestCases = []testcase{
 			{ct: ContentTypeJSON, rawData: testJSON + testJSON2, frames: []string{testJSON}},
 		},
 		readOpts:    []ReaderOption{&ReaderWriterOptions{MaxFrameSize: testYAMLlen}},
-		readResults: []error{nil, FrameSizeOverflowErr, io.ErrClosedPipe, io.ErrClosedPipe},
+		readResults: []error{nil, ErrFrameSizeOverflow, io.ErrClosedPipe, io.ErrClosedPipe},
 	},
 	{
 		name: "Write: the second frame is too large",
@@ -246,7 +246,7 @@ var defaultTestCases = []testcase{
 			{ct: ContentTypeJSON, frames: []string{testJSON, testJSON2}, rawData: testJSON},
 		},
 		writeOpts:    []WriterOption{&ReaderWriterOptions{MaxFrameSize: testYAMLlen}},
-		writeResults: []error{nil, FrameSizeOverflowErr, io.ErrClosedPipe},
+		writeResults: []error{nil, ErrFrameSizeOverflow, io.ErrClosedPipe},
 	},
 	// CloseOnError
 	{
@@ -295,7 +295,7 @@ var defaultTestCases = []testcase{
 			{ct: ContentTypeYAML, frames: []string{testYAML, testYAML, testYAML}, rawData: yamlSep + testYAML + yamlSep + testYAML},
 			{ct: ContentTypeJSON, frames: []string{testJSON, testJSON, testJSON}, rawData: testJSON + testJSON},
 		},
-		writeResults: []error{nil, nil, FrameCountOverflowErr, io.ErrClosedPipe},
+		writeResults: []error{nil, nil, ErrFrameCountOverflow, io.ErrClosedPipe},
 		writeOpts:    []WriterOption{&ReaderWriterOptions{MaxFrames: 2}},
 	},
 	{
@@ -308,7 +308,7 @@ var defaultTestCases = []testcase{
 				rawData: testJSON + testJSON + testJSON,
 				frames:  []string{testJSON, testJSON}},
 		},
-		readResults: []error{nil, nil, FrameCountOverflowErr, io.ErrClosedPipe},
+		readResults: []error{nil, nil, ErrFrameCountOverflow, io.ErrClosedPipe},
 		readOpts:    []ReaderOption{&ReaderWriterOptions{MaxFrames: 2}},
 	},
 	{
@@ -321,7 +321,7 @@ var defaultTestCases = []testcase{
 				rawData: testJSON + testJSON + testJSON,
 				frames:  []string{testJSON, testJSON}},
 		},
-		readResults:           []error{nil, nil, FrameCountOverflowErr, FrameCountOverflowErr},
+		readResults:           []error{nil, nil, ErrFrameCountOverflow, ErrFrameCountOverflow},
 		readOpts:              []ReaderOption{&ReaderWriterOptions{MaxFrames: 2, CloseOnError: pointer.BoolPtr(false)}},
 		expectReaderNotCloser: true,
 	},
@@ -331,7 +331,7 @@ var defaultTestCases = []testcase{
 			{ct: ContentTypeYAML,
 				rawData: strings.Repeat("\n"+yamlSep, 10) + testYAML},
 		},
-		readResults: []error{FrameCountOverflowErr, io.ErrClosedPipe},
+		readResults: []error{ErrFrameCountOverflow, io.ErrClosedPipe},
 		readOpts:    []ReaderOption{&ReaderWriterOptions{MaxFrames: 1}},
 	},
 	{
@@ -340,7 +340,7 @@ var defaultTestCases = []testcase{
 			{ct: ContentTypeYAML,
 				rawData: strings.Repeat("\n"+yamlSep, 9) + testYAML + yamlSep + yamlSep, frames: []string{testYAML}},
 		},
-		readResults: []error{nil, FrameCountOverflowErr, io.ErrClosedPipe},
+		readResults: []error{nil, ErrFrameCountOverflow, io.ErrClosedPipe},
 		readOpts:    []ReaderOption{&ReaderWriterOptions{MaxFrames: 1}},
 	},
 	{
@@ -362,7 +362,7 @@ var defaultTestCases = []testcase{
 		testdata: []testdata{
 			{ct: otherCT, rawData: otherFrame, frames: []string{otherFrame}},
 		},
-		writeResults: []error{nil, FrameCountOverflowErr, io.ErrClosedPipe, io.ErrClosedPipe},
+		writeResults: []error{nil, ErrFrameCountOverflow, io.ErrClosedPipe, io.ErrClosedPipe},
 		readResults:  []error{nil, io.EOF, io.ErrClosedPipe, io.ErrClosedPipe},
 		writeOpts:    []WriterOption{&ReaderWriterOptions{MaxFrames: 1}},
 		readOpts:     []ReaderOption{&ReaderWriterOptions{MaxFrames: 1}},
@@ -399,7 +399,7 @@ var defaultTestCases = []testcase{
 			{ct: otherCT, rawData: otherFrame},
 		},
 		readOpts:    []ReaderOption{&ReaderWriterOptions{MaxFrameSize: otherFrameLen - 1, MaxFrames: 1}},
-		readResults: []error{FrameSizeOverflowErr},
+		readResults: []error{ErrFrameSizeOverflow},
 	},
 	{
 		name: "Write: other content type frame overflow when CloseOnError == true",
@@ -407,7 +407,7 @@ var defaultTestCases = []testcase{
 			{ct: otherCT, frames: []string{otherFrame}},
 		},
 		writeOpts:    []WriterOption{&ReaderWriterOptions{MaxFrameSize: otherFrameLen - 1, MaxFrames: 1}},
-		writeResults: []error{FrameSizeOverflowErr, io.ErrClosedPipe, io.ErrClosedPipe},
+		writeResults: []error{ErrFrameSizeOverflow, io.ErrClosedPipe, io.ErrClosedPipe},
 	},
 }
 

@@ -43,8 +43,8 @@ func (r *yamlReader) ReadFrame(context.Context) ([]byte, error) {
 	// Read one YAML document from the underlying YAMLReader. The YAMLReader reads the file line-by-line
 	// using a *bufio.Reader. The *bufio.Reader reads in turn from an IoLimitedReader, which limits the
 	// amount of bytes that can be read to avoid an endless data attack (which the YAMLReader doesn't
-	// protect against). If the frame is too large, errors.Is(err, FrameSizeOverflowErr) == true. Once
-	// FrameSizeOverflowErr has been returned once, it'll be returned for all consecutive calls (by design),
+	// protect against). If the frame is too large, errors.Is(err, ErrFrameSizeOverflow) == true. Once
+	// ErrFrameSizeOverflow has been returned once, it'll be returned for all consecutive calls (by design),
 	// because the byte counter is never reset.
 	frame, err := r.r.Read()
 	if err != nil {
@@ -57,7 +57,7 @@ func (r *yamlReader) ReadFrame(context.Context) ([]byte, error) {
 	// Enforce this "final" frame size <= maxFrameSize, as the limit on the IoLimitedReader was a bit less
 	// restrictive (also allowed reading the YAML document separator).
 	if int64(len(frame)) > r.maxFrameSize {
-		return nil, MakeFrameSizeOverflowError(r.maxFrameSize)
+		return nil, MakeErrFrameSizeOverflowor(r.maxFrameSize)
 	}
 
 	return frame, nil

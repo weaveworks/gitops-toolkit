@@ -127,7 +127,7 @@ func TestReadFrameList(t *testing.T) {
 	r = NewJSONReader(FromString(messyJSON), &ReaderWriterOptions{MaxFrameSize: testJSONlen - 1})
 	fr, err = ReadFrameList(ctx, r)
 	assert.Len(t, fr, 0)
-	assert.ErrorIs(t, err, FrameSizeOverflowErr)
+	assert.ErrorIs(t, err, ErrFrameSizeOverflow)
 }
 
 func TestWriteFrameList(t *testing.T) {
@@ -144,5 +144,5 @@ func TestWriteFrameList(t *testing.T) {
 	w = NewJSONWriter(&buf, &ReaderWriterOptions{MaxFrameSize: testJSONlen})
 	err = WriteFrameList(ctx, w, FrameList{[]byte(testJSON), []byte(testJSON2)})
 	assert.Equal(t, buf.String(), testJSON)
-	assert.ErrorIs(t, err, FrameSizeOverflowErr)
+	assert.ErrorIs(t, err, ErrFrameSizeOverflow)
 }

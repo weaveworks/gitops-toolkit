@@ -11,28 +11,28 @@ import (
 const DefaultMaxFrameSize = 16 * 1024 * 1024
 
 var (
-	// FrameSizeOverflowErr is returned from Reader.ReadFrame or Writer.WriteFrame when a
+	// ErrFrameSizeOverflow is returned from Reader.ReadFrame or Writer.WriteFrame when a
 	// frame exceeds the maximum allowed size.
-	FrameSizeOverflowErr = errors.New("read frame was larger than maximum allowed size")
-	// FrameCountOverflowErr is returned when a Reader or Writer have processed too many
+	ErrFrameSizeOverflow = errors.New("read frame was larger than maximum allowed size")
+	// ErrFrameCountOverflow is returned when a Reader or Writer have processed too many
 	// frames.
-	FrameCountOverflowErr = errors.New("the maximum amount of frames have been processed")
+	ErrFrameCountOverflow = errors.New("the maximum amount of frames have been processed")
 )
 
-// MakeFrameSizeOverflowError returns a wrapped FrameSizeOverflowErr along with
+// MakeErrFrameSizeOverflowor returns a wrapped ErrFrameSizeOverflow along with
 // context in a normalized way.
-func MakeFrameSizeOverflowError(maxFrameSize int64) error {
-	return fmt.Errorf("%w %d bytes", FrameSizeOverflowErr, maxFrameSize)
+func MakeErrFrameSizeOverflowor(maxFrameSize int64) error {
+	return fmt.Errorf("%w %d bytes", ErrFrameSizeOverflow, maxFrameSize)
 }
 
-// MakeFrameCountOverflowError returns a wrapped FrameCountOverflowErr along with
+// MakeErrFrameCountOverflowor returns a wrapped ErrFrameCountOverflow along with
 // context in a normalized way.
-func MakeFrameCountOverflowError(maxFrames int64) error {
-	return fmt.Errorf("%w: %d", FrameCountOverflowErr, maxFrames)
+func MakeErrFrameCountOverflowor(maxFrames int64) error {
+	return fmt.Errorf("%w: %d", ErrFrameCountOverflow, maxFrames)
 }
 
 // IoLimitedReader is a specialized io.Reader helper type, which allows detecting when
-// a read grows larger than the allowed maxFrameSize, returning a FrameSizeOverflowErr in that case.
+// a read grows larger than the allowed maxFrameSize, returning a ErrFrameSizeOverflow in that case.
 //
 // Internally there's a byte counter registering how many bytes have been read using the io.Reader
 // across all Read calls since the last ResetCounter reset, which resets the byte counter to 0. This
@@ -80,7 +80,7 @@ func (l *ioLimitedReader) Read(b []byte) (int, error) {
 	// If we've already read more than we're allowed to, return an overflow error
 	if l.frameBytes > l.maxFrameSize {
 		// Keep returning this error as long as relevant
-		return 0, MakeFrameSizeOverflowError(l.maxFrameSize)
+		return 0, MakeErrFrameSizeOverflowor(l.maxFrameSize)
 
 	} else if l.frameBytes == l.maxFrameSize {
 		// At this point we're not sure if the frame actually stops here or not
@@ -102,7 +102,7 @@ func (l *ioLimitedReader) Read(b []byte) (int, error) {
 			return 0, io.ErrNoProgress
 		}
 		// Return that the frame overflowed now, as were able to read the byte (tmpn must be 1)
-		return 0, MakeFrameSizeOverflowError(l.maxFrameSize)
+		return 0, MakeErrFrameSizeOverflowor(l.maxFrameSize)
 	} // else l.frameBytes < l.maxFrameSize
 
 	// We can at maximum read bytesLeft bytes more, shrink b accordingly if b is larger than the

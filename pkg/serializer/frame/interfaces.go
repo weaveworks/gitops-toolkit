@@ -37,9 +37,9 @@ type Closer interface {
 // Once the Reader has been closed (either directly using Close or indirectly by a previous error
 // in ReadFrame, if ReadWriterOptions.CloseOnError == true), ReadFrame MUST return io.ErrClosedPipe.
 // The Reader MUST directly abort the read operation if the frame size exceeds
-// ReadWriterOptions.MaxFrameSize, and return FrameSizeOverflowErr.
+// ReadWriterOptions.MaxFrameSize, and return ErrFrameSizeOverflow.
 //
-// The Reader MUST return FrameCountOverflowErr if the underlying Reader has returned more than
+// The Reader MUST return ErrFrameCountOverflow if the underlying Reader has returned more than
 // ReadWriterOptions.MaxFrames successful read operations. Returned errors (including io.EOF)
 // MUST be checked for equality using errors.Is(err, target), NOT using err == target.
 //
@@ -95,8 +95,8 @@ type ReaderFactory interface {
 // Returned errors MUST be checked for equality using errors.Is(err, target), NOT using err == target.
 //
 // The Writer MUST directly abort the read operation if the frame size exceeds ReadWriterOptions.MaxFrameSize,
-// and return FrameSizeOverflowErr. The Writer MUST ignore empty frames, where len(frame) == 0, possibly
-// after sanitation. The Writer MUST return FrameCountOverflowErr if WriteFrame has been called more than
+// and return ErrFrameSizeOverflow. The Writer MUST ignore empty frames, where len(frame) == 0, possibly
+// after sanitation. The Writer MUST return ErrFrameCountOverflow if WriteFrame has been called more than
 // ReadWriterOptions.MaxFrames times.
 //
 // The Writer MAY automatically close the underlying io.WriteCloser, depending on ReadWriterOptions.CloseOnError.

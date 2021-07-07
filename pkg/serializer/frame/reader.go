@@ -36,7 +36,7 @@ func (r *highlevelReader) ReadFrame(ctx context.Context) ([]byte, error) {
 
 		// Refuse to write more than the maximum amount of successful frames
 		if r.successfulFrameCount > r.opts.MaxFrames {
-			return MakeFrameCountOverflowError(r.opts.MaxFrames)
+			return MakeErrFrameCountOverflowor(r.opts.MaxFrames)
 		}
 
 		// Call the underlying Reader. This MUST be done within r.res.accessResource in order to
@@ -61,7 +61,7 @@ func (r *highlevelReader) ReadFrame(ctx context.Context) ([]byte, error) {
 func (r *highlevelReader) readFrame(ctx context.Context) ([]byte, error) {
 	// Ensure the total number of frames doesn't overflow
 	if r.totalFrameCount >= r.maxTotalFrames {
-		return nil, MakeFrameCountOverflowError(r.opts.MaxFrames)
+		return nil, MakeErrFrameCountOverflowor(r.opts.MaxFrames)
 	}
 	// Read the frame, and increase the total frame counter is increased
 	frame, err := r.read.ReadFrame(ctx)
@@ -83,9 +83,9 @@ func (r *highlevelReader) readFrame(ctx context.Context) ([]byte, error) {
 
 	// Otherwise, if it's non-empty, return it and increase the "successful" counter
 	r.successfulFrameCount += 1
-	// If the frame count now overflows, return a FrameCountOverflowError
+	// If the frame count now overflows, return a ErrFrameCountOverflowor
 	if r.successfulFrameCount > r.opts.MaxFrames {
-		return nil, MakeFrameCountOverflowError(r.opts.MaxFrames)
+		return nil, MakeErrFrameCountOverflowor(r.opts.MaxFrames)
 	}
 	return frame, nil
 }

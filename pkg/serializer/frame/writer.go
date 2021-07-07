@@ -28,11 +28,11 @@ func (w *highlevelWriter) WriteFrame(ctx context.Context, frame []byte) error {
 
 		// Refuse to write too large frames
 		if int64(len(frame)) > w.opts.MaxFrameSize {
-			return MakeFrameSizeOverflowError(w.opts.MaxFrameSize)
+			return MakeErrFrameSizeOverflowor(w.opts.MaxFrameSize)
 		}
 		// Refuse to write more than the maximum amount of frames
 		if w.frameCount >= w.opts.MaxFrames {
-			return MakeFrameCountOverflowError(w.opts.MaxFrames)
+			return MakeErrFrameCountOverflowor(w.opts.MaxFrames)
 		}
 
 		// Sanitize the frame

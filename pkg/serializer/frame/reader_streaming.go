@@ -44,10 +44,10 @@ type streamingReader struct {
 func (r *streamingReader) ReadFrame(context.Context) ([]byte, error) {
 	// Read one frame from the streamReader
 	frame, err := r.streamReader.Read()
-	// Transform streaming.ErrObjectTooLarge to a FrameSizeOverflowErr, if returned.
+	// Transform streaming.ErrObjectTooLarge to a ErrFrameSizeOverflow, if returned.
 	return frame, mapError(err, errorMappings{
 		streaming.ErrObjectTooLarge: func() error {
-			return MakeFrameSizeOverflowError(r.maxFrameSize)
+			return MakeErrFrameSizeOverflowor(r.maxFrameSize)
 		},
 	})
 }
