@@ -1,10 +1,12 @@
 package serializer
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"reflect"
 
+	"github.com/weaveworks/libgitops/pkg/serializer/frame"
 	"github.com/weaveworks/libgitops/pkg/util"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -38,7 +40,7 @@ type DecodingOptions struct {
 	DecodeListElements *bool
 
 	// Whether to preserve YAML comments internally. This only works for objects embedding metav1.ObjectMeta.
-	// Only applicable to ContentTypeYAML framers.
+	// Only applicable to frame.ContentTypeYAML framers.
 	// Using any other framer will be silently ignored. Usage of this option also requires setting
 	// the PreserveComments in EncodingOptions, too. (Default: false)
 	PreserveComments *bool
@@ -120,7 +122,7 @@ type decoder struct {
 	opts    DecodingOptions
 }
 
-// Decode returns the decoded object from the next document in the FrameReader stream.
+// Decode returns the decoded object from the next document in the frame.Reader stream.
 // If there are multiple documents in the underlying stream, this call will read one
 // 	document and return it. Decode might be invoked for getting new documents until it
 // 	returns io.EOF. When io.EOF is reached in a call, the stream is automatically closed.
@@ -136,17 +138,18 @@ type decoder struct {
 // If opts.DecodeUnknown is true, any type with an unrecognized apiVersion/kind will be returned as a
 // 	*runtime.Unknown object instead of returning a UnrecognizedTypeError.
 // opts.DecodeListElements is not applicable in this call.
-func (d *decoder) Decode(fr FrameReader) (runtime.Object, error) {
-	// Read a frame from the FrameReader
+func (d *decoder) Decode(fr frame.Reader) (runtime.Object, error) {
+	// Read a frame from the frame.Reader
 	// TODO: Make sure to test the case when doc might contain something, and err is io.EOF
-	doc, err := fr.ReadFrame()
+	ctx := context.TODO()
+	doc, err := fr.ReadFrame(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return d.decode(doc, nil, fr.ContentType())
 }
 
-func (d *decoder) decode(doc []byte, into runtime.Object, ct ContentType) (runtime.Object, error) {
+func (d *decoder) decode(doc []byte, into runtime.Object, ct frame.ContentType) (runtime.Object, error) {
 	// If the scheme doesn't recognize a v1.List, and we enabled opts.DecodeListElements,
 	// make the scheme able to decode the v1.List automatically
 	if *d.opts.DecodeListElements && !d.scheme.Recognizes(listGVK) {
@@ -190,7 +193,7 @@ func (d *decoder) decode(doc []byte, into runtime.Object, ct ContentType) (runti
 	return obj, nil
 }
 
-// DecodeInto decodes the next document in the FrameReader stream into obj if the types are matching.
+// DecodeInto decodes the next document in the frame.Reader stream into obj if the types are matching.
 // If there are multiple documents in the underlying stream, this call will read one
 // 	document and return it. Decode might be invoked for getting new documents until it
 // 	returns io.EOF. When io.EOF is reached in a call, the stream is automatically closed.
@@ -207,10 +210,11 @@ func (d *decoder) decode(doc []byte, into runtime.Object, ct ContentType) (runti
 // opts.DecodeUnknown is not applicable in this call. In case you want to decode an object into a
 // 	*runtime.Unknown, just create a runtime.Unknown object and pass the pointer as obj into DecodeInto
 // 	and it'll work.
-func (d *decoder) DecodeInto(fr FrameReader, into runtime.Object) error {
-	// Read a frame from the FrameReader.
+func (d *decoder) DecodeInto(fr frame.Reader, into runtime.Object) error {
+	// Read a frame from the frame.Reader.
 	// TODO: Make sure to test the case when doc might contain something, and err is io.EOF
-	doc, err := fr.ReadFrame()
+	ctx := context.TODO()
+	doc, err := fr.ReadFrame(ctx)
 	if err != nil {
 		return err
 	}
@@ -220,7 +224,7 @@ func (d *decoder) DecodeInto(fr FrameReader, into runtime.Object) error {
 	return err
 }
 
-// DecodeAll returns the decoded objects from all documents in the FrameReader stream. The underlying
+// DecodeAll returns the decoded objects from all documents in the frame.Reader stream. The underlying
 // stream is automatically closed on io.EOF. io.EOF is never returned from this function.
 // If any decoded object is for an unrecognized group, or version, UnrecognizedGroupError
 // 	or UnrecognizedVersionError might be returned.
@@ -235,7 +239,7 @@ func (d *decoder) DecodeInto(fr FrameReader, into runtime.Object) error {
 // 	added into the returning slice. The v1.List will in this case not be returned.
 // If opts.DecodeUnknown is true, any type with an unrecognized apiVersion/kind will be returned as a
 // 	*runtime.Unknown object instead of returning a UnrecognizedTypeError.
-func (d *decoder) DecodeAll(fr FrameReader) ([]runtime.Object, error) {
+func (d *decoder) DecodeAll(fr frame.Reader) ([]runtime.Object, error) {
 	objs := []runtime.Object{}
 	for {
 		obj, err := d.Decode(fr)
@@ -258,7 +262,7 @@ func (d *decoder) DecodeAll(fr FrameReader) ([]runtime.Object, error) {
 }
 
 // decodeUnknown decodes bytes of a certain content type into a returned *runtime.Unknown object
-func (d *decoder) decodeUnknown(doc []byte, ct ContentType) (runtime.Object, error) {
+func (d *decoder) decodeUnknown(doc []byte, ct frame.ContentType) (runtime.Object, error) {
 	// Do a DecodeInto the new pointer to the object we've got. The resulting into object is
 	// also returned.
 	// The content type isn't really used here, as runtime.Unknown will never implement
@@ -295,7 +299,7 @@ func (d *decoder) handleDecodeError(doc []byte, origErr error) error {
 	return origErr
 }
 
-func (d *decoder) extractNestedObjects(obj runtime.Object, ct ContentType) ([]runtime.Object, error) {
+func (d *decoder) extractNestedObjects(obj runtime.Object, ct frame.ContentType) ([]runtime.Object, error) {
 	// If we didn't ask for list-unwrapping functionality, return directly
 	if !*d.opts.DecodeListElements {
 		return []runtime.Object{obj}, nil

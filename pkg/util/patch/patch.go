@@ -7,6 +7,7 @@ import (
 
 	"github.com/weaveworks/libgitops/pkg/runtime"
 	"github.com/weaveworks/libgitops/pkg/serializer"
+	"github.com/weaveworks/libgitops/pkg/serializer/frame"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
 )
@@ -31,7 +32,7 @@ func (p *patcher) Create(new runtime.Object, applyFn func(runtime.Object) error)
 	encoder := p.serializer.Encoder()
 	old := new.DeepCopyObject().(runtime.Object)
 
-	if err = encoder.Encode(serializer.NewJSONFrameWriter(&oldBytes), old); err != nil {
+	if err = encoder.Encode(frame.NewJSONWriter(&oldBytes), old); err != nil {
 		return
 	}
 
@@ -39,7 +40,7 @@ func (p *patcher) Create(new runtime.Object, applyFn func(runtime.Object) error)
 		return
 	}
 
-	if err = encoder.Encode(serializer.NewJSONFrameWriter(&newBytes), new); err != nil {
+	if err = encoder.Encode(frame.NewJSONWriter(&newBytes), new); err != nil {
 		return
 	}
 
@@ -89,13 +90,13 @@ func (p *patcher) ApplyOnFile(filePath string, patch []byte, gvk schema.GroupVer
 // with the serializer so it conforms to a runtime.Object
 // TODO: Just use encoding/json.Indent here instead?
 func (p *patcher) serializerEncode(input []byte) ([]byte, error) {
-	obj, err := p.serializer.Decoder().Decode(serializer.NewJSONFrameReader(serializer.FromBytes(input)))
+	obj, err := p.serializer.Decoder().Decode(frame.NewJSONReader(frame.FromBytes(input)))
 	if err != nil {
 		return nil, err
 	}
 
 	var result bytes.Buffer
-	if err := p.serializer.Encoder().Encode(serializer.NewJSONFrameWriter(&result), obj); err != nil {
+	if err := p.serializer.Encoder().Encode(frame.NewJSONWriter(&result), obj); err != nil {
 		return nil, err
 	}
 

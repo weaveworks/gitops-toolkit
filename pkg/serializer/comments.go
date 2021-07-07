@@ -2,12 +2,14 @@ package serializer
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
 
 	"github.com/sirupsen/logrus"
 	"github.com/weaveworks/libgitops/pkg/serializer/comments"
+	"github.com/weaveworks/libgitops/pkg/serializer/frame"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/kustomize/kyaml/yaml"
@@ -24,10 +26,10 @@ var (
 
 // tryToPreserveComments tries to save the original file data (base64-encoded) into an annotation.
 // This original file data can be used at encoding-time to preserve comments
-func (d *decoder) tryToPreserveComments(doc []byte, obj runtime.Object, ct ContentType) {
+func (d *decoder) tryToPreserveComments(doc []byte, obj runtime.Object, ct frame.ContentType) {
 	// If the user opted into preserving comments and the format is YAML, proceed
 	// If they didn't, return directly
-	if !(*d.opts.PreserveComments && ct == ContentTypeYAML) {
+	if !(*d.opts.PreserveComments && ct == frame.ContentTypeYAML) {
 		return
 	}
 
@@ -39,7 +41,7 @@ func (d *decoder) tryToPreserveComments(doc []byte, obj runtime.Object, ct Conte
 }
 
 // tryToPreserveComments tries to locate the possibly-saved original file data in the object's annotation
-func (e *encoder) encodeWithCommentSupport(versionEncoder runtime.Encoder, fw FrameWriter, obj runtime.Object, metaObj metav1.Object) error {
+func (e *encoder) encodeWithCommentSupport(versionEncoder runtime.Encoder, fw frame.Writer, obj runtime.Object, metaObj metav1.Object) error {
 	// If the user did not opt into preserving comments, just sanitize ObjectMeta temporarily and and return
 	if !*e.opts.PreserveComments {
 		// Normal encoding without the annotation (so it doesn't leak by accident)
@@ -47,8 +49,8 @@ func (e *encoder) encodeWithCommentSupport(versionEncoder runtime.Encoder, fw Fr
 	}
 
 	// The user requested to preserve comments, but content type is not YAML, so log, sanitize and return
-	if fw.ContentType() != ContentTypeYAML {
-		logrus.Debugf("Asked to preserve comments, but ContentType is not YAML, so ignoring")
+	if fw.ContentType() != frame.ContentTypeYAML {
+		logrus.Debugf("Asked to preserve comments, but frame.ContentType is not YAML, so ignoring")
 
 		// Normal encoding without the annotation (so it doesn't leak by accident)
 		return noAnnotationWrapper(metaObj, e.normalEncodeFunc(versionEncoder, fw, obj))
@@ -62,9 +64,9 @@ func (e *encoder) encodeWithCommentSupport(versionEncoder runtime.Encoder, fw Fr
 		return err
 	}
 
-	// Encode the new object into a temporary buffer, it should not be written as the "final result" to the FrameWriter
+	// Encode the new object into a temporary buffer, it should not be written as the "final result" to the frame.Writer
 	buf := new(bytes.Buffer)
-	if err := noAnnotationWrapper(metaObj, e.normalEncodeFunc(versionEncoder, NewYAMLFrameWriter(buf), obj)); err != nil {
+	if err := noAnnotationWrapper(metaObj, e.normalEncodeFunc(versionEncoder, frame.NewYAMLWriter(buf), obj)); err != nil {
 		// fatal error
 		return err
 	}
@@ -83,15 +85,17 @@ func (e *encoder) encodeWithCommentSupport(versionEncoder runtime.Encoder, fw Fr
 		return err
 	}
 
-	// Print the new schema with the old comments kept to the FrameWriter
-	_, err = fmt.Fprint(fw, afterNode.MustString())
+	// Print the new schema with the old comments kept to the frame.Writer
+	ctx := context.TODO()
+	_, err = fmt.Fprint(frame.ToIoWriteCloser(ctx, fw), afterNode.MustString())
 	// we're done, exit the encode function
 	return err
 }
 
-func (e *encoder) normalEncodeFunc(versionEncoder runtime.Encoder, fw FrameWriter, obj runtime.Object) func() error {
+func (e *encoder) normalEncodeFunc(versionEncoder runtime.Encoder, fw frame.Writer, obj runtime.Object) func() error {
 	return func() error {
-		return versionEncoder.Encode(obj, fw)
+		ctx := context.TODO()
+		return versionEncoder.Encode(obj, frame.ToIoWriteCloser(ctx, fw))
 	}
 }
 
