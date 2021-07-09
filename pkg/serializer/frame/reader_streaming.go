@@ -12,7 +12,7 @@ import (
 // newJSONReader creates a "low-level" JSON Reader from the given io.ReadCloser.
 func newJSONReader(rc io.ReadCloser, o *ReaderOptions) Reader {
 	// json.Framer.NewFrameReader takes care of the actual JSON framing logic
-	return newStreamingReader(ContentTypeJSON, json.Framer.NewFrameReader(rc), o)
+	return newStreamingReader(FramingTypeJSON, json.Framer.NewFrameReader(rc), o)
 }
 
 // newStreamingReader makes a generic Reader that reads from an io.ReadCloser returned
@@ -24,11 +24,11 @@ func newJSONReader(rc io.ReadCloser, o *ReaderOptions) Reader {
 //
 // Note: This Reader is a so-called "low-level" one. It doesn't do tracing, mutex locking, or
 // proper closing logic. It must be wrapped by a composite, high-level Reader like highlevelReader.
-func newStreamingReader(contentType ContentType, rc io.ReadCloser, o *ReaderOptions) Reader {
+func newStreamingReader(contentType FramingType, rc io.ReadCloser, o *ReaderOptions) Reader {
 	// Limit the amount of bytes that can be read in one frame
 	lr := NewIoLimitedReader(rc, o.MaxFrameSize)
 	return &streamingReader{
-		ContentTyped: contentType.ToContentTyped(),
+		FramingTyped: contentType.ToFramingTyped(),
 		lr:           lr,
 		streamReader: newK8sStreamingReader(ioReadCloser{lr, rc}, o.MaxFrameSize),
 		maxFrameSize: o.MaxFrameSize,
@@ -44,7 +44,7 @@ type ioReadCloser struct {
 // given k8sStreamingReader. When reader_streaming_k8s.go is upstreamed, we can replace the
 // temporary k8sStreamingReader interface with a "proper" Kubernetes one.
 type streamingReader struct {
-	ContentTyped
+	FramingTyped
 	lr           IoLimitedReader
 	streamReader k8sStreamingReader
 	maxFrameSize int64

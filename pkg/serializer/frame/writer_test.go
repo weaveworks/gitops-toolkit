@@ -11,10 +11,10 @@ import (
 )
 
 func TestNewWriter_Unrecognized(t *testing.T) {
-	fr := NewWriter(ContentType("doesnotexist"), ioutil.Discard)
+	fr := NewWriter(FramingType("doesnotexist"), ioutil.Discard)
 	ctx := context.Background()
 	err := fr.WriteFrame(ctx, make([]byte, 1))
-	assert.ErrorIs(t, err, ErrUnsupportedContentType)
+	assert.ErrorIs(t, err, ErrUnsupportedFramingType)
 }
 
 func TestWriterShortBuffer(t *testing.T) {

@@ -46,7 +46,7 @@ type testcase struct {
 }
 
 type testdata struct {
-	ct ContentType
+	ct FramingType
 	// frames contain the individual frames of rawData, which in turn is the content of the underlying
 	// source/stream. if len(writeResults) == 0, there will be no checking that writing all frames
 	// in order will produce the correct rawData. if len(readResults) == 0, there will be no checking
@@ -87,7 +87,7 @@ const (
 `
 	messyJSON = messyJSONP1 + messyJSONP2
 
-	otherCT       = ContentType("other")
+	otherCT       = FramingType("other")
 	otherFrame    = "('other'; 9)\n('bar'; true)"
 	otherFrameLen = int64(len(otherFrame))
 )
@@ -105,8 +105,8 @@ var defaultTestCases = []testcase{
 	{
 		name: "simple roundtrip",
 		testdata: []testdata{
-			{ct: ContentTypeYAML, frames: []string{testYAML}, rawData: yamlSep + testYAML},
-			{ct: ContentTypeJSON, frames: []string{testJSON}, rawData: testJSON},
+			{ct: FramingTypeYAML, frames: []string{testYAML}, rawData: yamlSep + testYAML},
+			{ct: FramingTypeJSON, frames: []string{testJSON}, rawData: testJSON},
 		},
 		writeResults: []error{nil, nil, nil, nil},
 		readResults:  []error{nil, io.EOF, io.EOF, io.EOF},
@@ -115,8 +115,8 @@ var defaultTestCases = []testcase{
 	{
 		name: "two-frame roundtrip with closed writer",
 		testdata: []testdata{
-			{ct: ContentTypeYAML, frames: []string{testYAML, testYAML}, rawData: yamlSep + testYAML + yamlSep + testYAML},
-			{ct: ContentTypeJSON, frames: []string{testJSON, testJSON2}, rawData: testJSON + testJSON2},
+			{ct: FramingTypeYAML, frames: []string{testYAML, testYAML}, rawData: yamlSep + testYAML + yamlSep + testYAML},
+			{ct: FramingTypeJSON, frames: []string{testJSON, testJSON2}, rawData: testJSON + testJSON2},
 		},
 		writeResults: []error{nil, nil, nil, nil},
 		readResults:  []error{nil, nil, io.EOF, io.EOF},
@@ -125,14 +125,14 @@ var defaultTestCases = []testcase{
 	{
 		name: "YAML Read: a newline will be added",
 		testdata: []testdata{
-			{ct: ContentTypeYAML, rawData: noNewlineYAML, frames: []string{testYAML}},
+			{ct: FramingTypeYAML, rawData: noNewlineYAML, frames: []string{testYAML}},
 		},
 		readResults: []error{nil, io.EOF},
 	},
 	{
 		name: "YAML Write: a newline will be added",
 		testdata: []testdata{
-			{ct: ContentTypeYAML, frames: []string{noNewlineYAML}, rawData: yamlSep + testYAML},
+			{ct: FramingTypeYAML, frames: []string{noNewlineYAML}, rawData: yamlSep + testYAML},
 		},
 		writeResults: []error{nil},
 	},
@@ -140,26 +140,26 @@ var defaultTestCases = []testcase{
 	{
 		name: "Read: io.EOF when there are no non-empty frames",
 		testdata: []testdata{
-			{ct: ContentTypeYAML, rawData: "---"},
-			{ct: ContentTypeYAML, rawData: "---\n"},
-			{ct: ContentTypeJSON, rawData: ""},
-			{ct: ContentTypeJSON, rawData: "    \n    "},
+			{ct: FramingTypeYAML, rawData: "---"},
+			{ct: FramingTypeYAML, rawData: "---\n"},
+			{ct: FramingTypeJSON, rawData: ""},
+			{ct: FramingTypeJSON, rawData: "    \n    "},
 		},
 		readResults: []error{io.EOF},
 	},
 	{
 		name: "Write: Empty sanitized frames aren't written",
 		testdata: []testdata{
-			{ct: ContentTypeYAML, frames: []string{"---", "---\n", " \n--- \n---"}},
-			{ct: ContentTypeJSON, frames: []string{"", "    \n    ", "  "}},
+			{ct: FramingTypeYAML, frames: []string{"---", "---\n", " \n--- \n---"}},
+			{ct: FramingTypeJSON, frames: []string{"", "    \n    ", "  "}},
 		},
 		writeResults: []error{nil, nil, nil},
 	},
 	{
 		name: "Write: can write empty frames forever without errors",
 		testdata: []testdata{
-			{ct: ContentTypeYAML, frames: []string{testYAML, testYAML}, rawData: yamlSep + testYAML + yamlSep + testYAML},
-			{ct: ContentTypeJSON, frames: []string{testJSON, testJSON2}, rawData: testJSON + testJSON2},
+			{ct: FramingTypeYAML, frames: []string{testYAML, testYAML}, rawData: yamlSep + testYAML + yamlSep + testYAML},
+			{ct: FramingTypeJSON, frames: []string{testJSON, testJSON2}, rawData: testJSON + testJSON2},
 		},
 		writeResults: []error{nil, nil, nil, nil, nil},
 		readResults:  []error{nil, nil, io.EOF},
@@ -168,30 +168,30 @@ var defaultTestCases = []testcase{
 	{
 		name: "YAML Read: a leading \\n--- will be ignored",
 		testdata: []testdata{
-			{ct: ContentTypeYAML, rawData: "\n" + yamlSep + noNewlineYAML, frames: []string{testYAML}},
+			{ct: FramingTypeYAML, rawData: "\n" + yamlSep + noNewlineYAML, frames: []string{testYAML}},
 		},
 		readResults: []error{nil, io.EOF},
 	},
 	{
 		name: "YAML Read: a leading --- will be ignored",
 		testdata: []testdata{
-			{ct: ContentTypeYAML, rawData: yamlSep + noNewlineYAML, frames: []string{testYAML}},
+			{ct: FramingTypeYAML, rawData: yamlSep + noNewlineYAML, frames: []string{testYAML}},
 		},
 		readResults: []error{nil, io.EOF},
 	},
 	{
 		name: "Read: sanitize messy content",
 		testdata: []testdata{
-			{ct: ContentTypeYAML, rawData: messyYAML, frames: []string{testYAML, testYAML}},
-			{ct: ContentTypeJSON, rawData: messyJSON, frames: []string{testJSON, testJSON}},
+			{ct: FramingTypeYAML, rawData: messyYAML, frames: []string{testYAML, testYAML}},
+			{ct: FramingTypeJSON, rawData: messyJSON, frames: []string{testJSON, testJSON}},
 		},
 		readResults: []error{nil, nil, io.EOF},
 	},
 	{
 		name: "Write: sanitize messy content",
 		testdata: []testdata{
-			{ct: ContentTypeYAML, frames: []string{messyYAMLP1, messyYAMLP2}, rawData: yamlSep + testYAML + yamlSep + testYAML},
-			{ct: ContentTypeJSON, frames: []string{messyJSONP1, messyJSONP2}, rawData: testJSON + testJSON},
+			{ct: FramingTypeYAML, frames: []string{messyYAMLP1, messyYAMLP2}, rawData: yamlSep + testYAML + yamlSep + testYAML},
+			{ct: FramingTypeJSON, frames: []string{messyJSONP1, messyJSONP2}, rawData: testJSON + testJSON},
 		},
 		writeResults: []error{nil, nil},
 	},
@@ -199,8 +199,8 @@ var defaultTestCases = []testcase{
 	{
 		name: "Read: the frame size is exactly within bounds, also enforce counter reset",
 		testdata: []testdata{
-			{ct: ContentTypeYAML, rawData: testYAML + yamlSep + testYAML, frames: []string{testYAML, testYAML}},
-			{ct: ContentTypeJSON, rawData: testJSON + testJSON, frames: []string{testJSON, testJSON}},
+			{ct: FramingTypeYAML, rawData: testYAML + yamlSep + testYAML, frames: []string{testYAML, testYAML}},
+			{ct: FramingTypeJSON, rawData: testJSON + testJSON, frames: []string{testJSON, testJSON}},
 		},
 		readOpts:    []ReaderOption{&ReaderWriterOptions{MaxFrameSize: testYAMLlen}},
 		readResults: []error{nil, nil, io.EOF},
@@ -208,8 +208,8 @@ var defaultTestCases = []testcase{
 	{
 		name: "Read: the frame is out of bounds, on the same line",
 		testdata: []testdata{
-			{ct: ContentTypeYAML, rawData: testYAML},
-			{ct: ContentTypeJSON, rawData: testJSON},
+			{ct: FramingTypeYAML, rawData: testYAML},
+			{ct: FramingTypeJSON, rawData: testJSON},
 		},
 		readOpts:    []ReaderOption{&ReaderWriterOptions{MaxFrameSize: testYAMLlen - 1}},
 		readResults: []error{ErrFrameSizeOverflow},
@@ -217,7 +217,7 @@ var defaultTestCases = []testcase{
 	{
 		name: "YAML Read: the frame is out of bounds, but continues on the next line",
 		testdata: []testdata{
-			{ct: ContentTypeYAML, rawData: testYAML + testYAML},
+			{ct: FramingTypeYAML, rawData: testYAML + testYAML},
 		},
 		readOpts:    []ReaderOption{&ReaderWriterOptions{MaxFrameSize: testYAMLlen}},
 		readResults: []error{ErrFrameSizeOverflow},
@@ -225,8 +225,8 @@ var defaultTestCases = []testcase{
 	{
 		name: "Read: first frame ok, then always frame overflow",
 		testdata: []testdata{
-			{ct: ContentTypeYAML, rawData: testYAML + yamlSep + testYAML + testYAML, frames: []string{testYAML}},
-			{ct: ContentTypeJSON, rawData: testJSON + testJSON2, frames: []string{testJSON}},
+			{ct: FramingTypeYAML, rawData: testYAML + yamlSep + testYAML + testYAML, frames: []string{testYAML}},
+			{ct: FramingTypeJSON, rawData: testJSON + testJSON2, frames: []string{testJSON}},
 		},
 		readOpts:    []ReaderOption{&ReaderWriterOptions{MaxFrameSize: testYAMLlen}},
 		readResults: []error{nil, ErrFrameSizeOverflow, ErrFrameSizeOverflow, ErrFrameSizeOverflow},
@@ -234,8 +234,8 @@ var defaultTestCases = []testcase{
 	{
 		name: "Write: the second frame is too large, ignore that, but allow writing smaller frames later",
 		testdata: []testdata{
-			{ct: ContentTypeYAML, frames: []string{testYAML, testYAML + testYAML, testYAML}, rawData: yamlSep + testYAML + yamlSep + testYAML},
-			{ct: ContentTypeJSON, frames: []string{testJSON, testJSON2, testJSON}, rawData: testJSON + testJSON},
+			{ct: FramingTypeYAML, frames: []string{testYAML, testYAML + testYAML, testYAML}, rawData: yamlSep + testYAML + yamlSep + testYAML},
+			{ct: FramingTypeJSON, frames: []string{testJSON, testJSON2, testJSON}, rawData: testJSON + testJSON},
 		},
 		writeOpts:    []WriterOption{&ReaderWriterOptions{MaxFrameSize: testYAMLlen}},
 		writeResults: []error{nil, ErrFrameSizeOverflow, nil},
@@ -243,8 +243,8 @@ var defaultTestCases = []testcase{
 	{
 		name: "first frame ok, then Read => EOF and Write => nil consistently",
 		testdata: []testdata{
-			{ct: ContentTypeYAML, frames: []string{testYAML}, rawData: yamlSep + testYAML},
-			{ct: ContentTypeJSON, frames: []string{testJSON}, rawData: testJSON},
+			{ct: FramingTypeYAML, frames: []string{testYAML}, rawData: yamlSep + testYAML},
+			{ct: FramingTypeJSON, frames: []string{testJSON}, rawData: testJSON},
 		},
 		readResults:  []error{nil, io.EOF, io.EOF, io.EOF, io.EOF},
 		writeResults: []error{nil, nil, nil, nil, nil},
@@ -253,8 +253,8 @@ var defaultTestCases = []testcase{
 	{
 		name: "Write: Don't allow writing more than a maximum amount of frames",
 		testdata: []testdata{
-			{ct: ContentTypeYAML, frames: []string{testYAML, testYAML, testYAML}, rawData: yamlSep + testYAML + yamlSep + testYAML},
-			{ct: ContentTypeJSON, frames: []string{testJSON, testJSON, testJSON}, rawData: testJSON + testJSON},
+			{ct: FramingTypeYAML, frames: []string{testYAML, testYAML, testYAML}, rawData: yamlSep + testYAML + yamlSep + testYAML},
+			{ct: FramingTypeJSON, frames: []string{testJSON, testJSON, testJSON}, rawData: testJSON + testJSON},
 		},
 		writeResults: []error{nil, nil, ErrFrameCountOverflow, ErrFrameCountOverflow},
 		writeOpts:    []WriterOption{&ReaderWriterOptions{MaxFrames: 2}},
@@ -262,10 +262,10 @@ var defaultTestCases = []testcase{
 	{
 		name: "Read: Don't allow reading more than a maximum amount of successful frames",
 		testdata: []testdata{
-			{ct: ContentTypeYAML,
+			{ct: FramingTypeYAML,
 				rawData: testYAML + yamlSep + testYAML + yamlSep + testYAML,
 				frames:  []string{testYAML, testYAML}},
-			{ct: ContentTypeJSON,
+			{ct: FramingTypeJSON,
 				rawData: testJSON + testJSON + testJSON,
 				frames:  []string{testJSON, testJSON}},
 		},
@@ -275,7 +275,7 @@ var defaultTestCases = []testcase{
 	{
 		name: "Read: Don't allow reading more than a maximum amount of successful frames, and 10x in total",
 		testdata: []testdata{
-			{ct: ContentTypeYAML,
+			{ct: FramingTypeYAML,
 				rawData: strings.Repeat("\n"+yamlSep, 10) + testYAML},
 		},
 		readResults: []error{ErrFrameCountOverflow, ErrFrameCountOverflow},
@@ -284,7 +284,7 @@ var defaultTestCases = []testcase{
 	{
 		name: "Read: Allow reading up to the maximum amount of 10x the successful frames count",
 		testdata: []testdata{
-			{ct: ContentTypeYAML,
+			{ct: FramingTypeYAML,
 				rawData: strings.Repeat("\n"+yamlSep, 9) + testYAML + yamlSep + yamlSep, frames: []string{testYAML}},
 		},
 		readResults: []error{nil, ErrFrameCountOverflow, ErrFrameCountOverflow},
@@ -293,10 +293,10 @@ var defaultTestCases = []testcase{
 	{
 		name: "Read: Allow reading exactly that amount of successful frames, if then io.EOF",
 		testdata: []testdata{
-			{ct: ContentTypeYAML,
+			{ct: FramingTypeYAML,
 				rawData: testYAML + yamlSep + testYAML,
 				frames:  []string{testYAML, testYAML}},
-			{ct: ContentTypeJSON,
+			{ct: FramingTypeJSON,
 				rawData: testJSON + testJSON,
 				frames:  []string{testJSON, testJSON}},
 		},
@@ -370,20 +370,20 @@ func (h *FactoryTester) testRoundtripCase(t *testing.T, c *testcase) {
 
 	for i, data := range c.testdata {
 		t.Run(fmt.Sprintf("%d %s", i, data.ct), func(t *testing.T) {
-			h.testRoundtripCaseContentType(t, c, &data, wOpts, rOpts)
+			h.testRoundtripCaseFramingType(t, c, &data, wOpts, rOpts)
 		})
 	}
 }
 
-func (h *FactoryTester) testRoundtripCaseContentType(t *testing.T, c *testcase, d *testdata, wOpts *WriterOptions, rOpts *ReaderOptions) {
+func (h *FactoryTester) testRoundtripCaseFramingType(t *testing.T, c *testcase, d *testdata, wOpts *WriterOptions, rOpts *ReaderOptions) {
 	var buf bytes.Buffer
 
 	readCloseCounter := &recordingCloser{}
 	writeCloseCounter := &recordingCloser{}
 	w := h.factory.NewWriter(d.ct, ioWriteCloser{&buf, writeCloseCounter}, wOpts)
-	assert.Equalf(t, w.ContentType(), d.ct, "Writer.ContentType")
+	assert.Equalf(t, w.FramingType(), d.ct, "Writer.FramingType")
 	r := h.factory.NewReader(d.ct, ioReadCloser{&buf, readCloseCounter}, rOpts)
-	assert.Equalf(t, r.ContentType(), d.ct, "Reader.ContentType")
+	assert.Equalf(t, r.FramingType(), d.ct, "Reader.FramingType")
 	ctx := context.Background()
 
 	// Write frames using the writer

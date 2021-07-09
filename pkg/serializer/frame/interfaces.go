@@ -50,7 +50,7 @@ type Closer interface {
 // The Reader MAY support reporting trace spans for how long certain operations take.
 type Reader interface {
 	// The Reader is specific to this content type
-	ContentTyped
+	FramingTyped
 	// ReadFrame reads one frame from the underlying io.Read(Clos)er. At maximum, the frame is as
 	// large as ReadWriterOptions.MaxFrameSize. See the documentation on the Reader interface for more
 	// details.
@@ -61,16 +61,16 @@ type Reader interface {
 }
 
 // ReaderFactory knows how to create various different Readers for
-// given ContentTypes. ErrUnsupportedContentType MUST be returned if the given
-// ContentType is not supported.
+// given FramingTypes. ErrUnsupportedFramingType MUST be returned if the given
+// FramingType is not supported.
 type ReaderFactory interface {
-	// NewReader returns a new Reader for the given ContentType.
+	// NewReader returns a new Reader for the given FramingType.
 	// The options are parsed in order, and the latter options override the former.
 	// The given io.Reader can also be a io.ReadCloser, and if so, Reader.Close(ctx)
 	// will close that io.ReadCloser.
 	// The ReaderFactory might allow any contentType as long as ReaderOptions.MaxFrames
 	// is 1, because then there might not be a need to perform framing.
-	NewReader(contentType ContentType, r io.Reader, opts ...ReaderOption) Reader
+	NewReader(contentType FramingType, r io.Reader, opts ...ReaderOption) Reader
 }
 
 // Writer is a content-type specific writer to an underlying io.Writer or io.WriteCloser.
@@ -103,7 +103,7 @@ type ReaderFactory interface {
 // The Writer MAY support reporting trace spans for how long certain operations take.
 type Writer interface {
 	// The Reader is specific to this content type
-	ContentTyped
+	FramingTyped
 	// WriteFrame writes one frame to the underlying io.Write(Close)r.
 	// See the documentation on the Writer interface for more details.
 	WriteFrame(ctx context.Context, frame []byte) error
@@ -113,15 +113,15 @@ type Writer interface {
 }
 
 // WriterFactory knows how to create various different Writers for
-// given ContentTypes.
+// given FramingTypes.
 type WriterFactory interface {
-	// NewWriter returns a new Writer for the given ContentType.
+	// NewWriter returns a new Writer for the given FramingType.
 	// The options are parsed in order, and the latter options override the former.
 	// The given io.Writer can also be a io.WriteCloser, and if so, Writer.Close(ctx)
 	// will close that io.WriteCloser.
 	// The WriterFactory might allow any contentType as long as WriterOptions.MaxFrames
 	// is 1, because then there might not be a need to perform framing.
-	NewWriter(contentType ContentType, w io.Writer, opts ...WriterOption) Writer
+	NewWriter(contentType FramingType, w io.Writer, opts ...WriterOption) Writer
 }
 
 // Factory combines ReaderFactory and WriterFactory.

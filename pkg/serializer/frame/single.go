@@ -5,17 +5,17 @@ import (
 	"io"
 )
 
-func newSingleReader(contentType ContentType, rc io.ReadCloser, o *ReaderOptions) Reader {
+func newSingleReader(contentType FramingType, rc io.ReadCloser, o *ReaderOptions) Reader {
 	return &singleReader{
-		ContentTyped: contentType.ToContentTyped(),
+		FramingTyped: contentType.ToFramingTyped(),
 		r:            NewIoLimitedReader(rc, o.MaxFrameSize),
 		c:            rc,
 	}
 }
 
-func newSingleWriter(contentType ContentType, wc io.WriteCloser, _ *WriterOptions) Writer {
+func newSingleWriter(contentType FramingType, wc io.WriteCloser, _ *WriterOptions) Writer {
 	return &singleWriter{
-		ContentTyped: contentType.ToContentTyped(),
+		FramingTyped: contentType.ToFramingTyped(),
 		wc:           wc,
 	}
 }
@@ -24,7 +24,7 @@ func newSingleWriter(contentType ContentType, wc io.WriteCloser, _ *WriterOption
 // It MUST be wrapped in a higher-level composite Reader like the highlevelReader to satisfy the
 // Reader interface correctly.
 type singleReader struct {
-	ContentTyped
+	FramingTyped
 	r           IoLimitedReader
 	c           io.Closer
 	hasBeenRead bool
@@ -49,7 +49,7 @@ func (r *singleReader) Close(context.Context) error { return r.c.Close() }
 // It MUST be wrapped in a higher-level composite Reader like the highlevelWriter to satisfy the
 // Writer interface correctly.
 type singleWriter struct {
-	ContentTyped
+	FramingTyped
 	wc             io.WriteCloser
 	hasBeenWritten bool
 }

@@ -8,13 +8,13 @@ import (
 // DefaultFactory is the default variant of Factory capable
 // of creating YAML- and JSON-compatible Readers and Writers.
 //
-// If ReaderWriterOptions.MaxFrames == 1, any ContentType can
+// If ReaderWriterOptions.MaxFrames == 1, any FramingType can
 // be supplied, not just YAML or JSON. ReadFrame will then read
 // and return all data in the underlying io.Reader. WriteFrame
 // will write the given frame to the underlying io.Writer as-is.
 type DefaultFactory struct{}
 
-func (f DefaultFactory) NewReader(contentType ContentType, r io.Reader, opts ...ReaderOption) Reader {
+func (f DefaultFactory) NewReader(contentType FramingType, r io.Reader, opts ...ReaderOption) Reader {
 	// Build the options from the defaults
 	o := defaultReaderOpts().ApplyOptions(opts)
 	// Wrap r in a io.NopCloser if it isn't closable. Mark os.Std{in,out,err} as not closable.
@@ -35,53 +35,53 @@ func toReadCloser(r io.Reader) (rc io.ReadCloser, hasCloser bool) {
 	return rc, hasCloser
 }
 
-func (DefaultFactory) lowlevelFromReadCloser(contentType ContentType, rc io.ReadCloser, o *ReaderOptions) Reader {
+func (DefaultFactory) lowlevelFromReadCloser(contentType FramingType, rc io.ReadCloser, o *ReaderOptions) Reader {
 	switch contentType {
-	case ContentTypeYAML:
+	case FramingTypeYAML:
 		return newYAMLReader(rc, o)
-	case ContentTypeJSON:
+	case FramingTypeJSON:
 		return newJSONReader(rc, o)
 	default:
 		// If only one frame is allowed, there is no need to frame.
 		if o.MaxFrames == 1 {
 			return newSingleReader(contentType, rc, o)
 		}
-		return newErrReader(contentType, MakeUnsupportedContentTypeError(contentType))
+		return newErrReader(contentType, MakeUnsupportedFramingTypeError(contentType))
 	}
 }
 
 // defaultReaderFactory is the variable used in public methods.
 var defaultReaderFactory ReaderFactory = DefaultFactory{}
 
-// NewReader returns a Reader for the given ContentType and underlying io.Read(Clos)er.
+// NewReader returns a Reader for the given FramingType and underlying io.Read(Clos)er.
 //
 // This is a shorthand for DefaultFactory{}.NewReader(contentType, r, opts...)
-func NewReader(contentType ContentType, r io.Reader, opts ...ReaderOption) Reader {
+func NewReader(contentType FramingType, r io.Reader, opts ...ReaderOption) Reader {
 	return defaultReaderFactory.NewReader(contentType, r, opts...)
 }
 
 // NewYAMLReader returns a Reader that supports both YAML and JSON. Frames are separated by "---\n"
 //
-// This is a shorthand for NewReader(ContentTypeYAML, rc, opts...)
+// This is a shorthand for NewReader(FramingTypeYAML, rc, opts...)
 func NewYAMLReader(r io.Reader, opts ...ReaderOption) Reader {
-	return NewReader(ContentTypeYAML, r, opts...)
+	return NewReader(FramingTypeYAML, r, opts...)
 }
 
 // NewJSONReader returns a Reader that supports both JSON. Objects are read from the stream one-by-one,
 // each object making up its own frame.
 //
-// This is a shorthand for NewReader(ContentTypeJSON, rc, opts...)
+// This is a shorthand for NewReader(FramingTypeJSON, rc, opts...)
 func NewJSONReader(r io.Reader, opts ...ReaderOption) Reader {
-	return NewReader(ContentTypeJSON, r, opts...)
+	return NewReader(FramingTypeJSON, r, opts...)
 }
 
-func newErrReader(contentType ContentType, err error) Reader {
-	return &errReader{contentType.ToContentTyped(), &nopCloser{}, err}
+func newErrReader(contentType FramingType, err error) Reader {
+	return &errReader{contentType.ToFramingTyped(), &nopCloser{}, err}
 }
 
 // errReader always returns an error
 type errReader struct {
-	ContentTyped
+	FramingTyped
 	Closer
 	err error
 }

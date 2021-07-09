@@ -5,9 +5,9 @@ import (
 	"io"
 )
 
-func newDelegatingWriter(contentType ContentType, w io.Writer, c io.Closer, opts *WriterOptions) Writer {
+func newDelegatingWriter(contentType FramingType, w io.Writer, c io.Closer, opts *WriterOptions) Writer {
 	return &delegatingWriter{
-		ContentTyped: contentType.ToContentTyped(),
+		FramingTyped: contentType.ToFramingTyped(),
 		w:            w,
 		c:            c,
 		opts:         opts,
@@ -16,7 +16,7 @@ func newDelegatingWriter(contentType ContentType, w io.Writer, c io.Closer, opts
 
 // delegatingWriter is an implementation of the Writer interface
 type delegatingWriter struct {
-	ContentTyped
+	FramingTyped
 	w    io.Writer
 	c    io.Closer
 	opts *WriterOptions
@@ -31,12 +31,12 @@ func (w *delegatingWriter) WriteFrame(_ context.Context, frame []byte) error {
 
 func (w *delegatingWriter) Close(context.Context) error { return w.c.Close() }
 
-func newErrWriter(contentType ContentType, err error) Writer {
-	return &errWriter{contentType.ToContentTyped(), &nopCloser{}, err}
+func newErrWriter(contentType FramingType, err error) Writer {
+	return &errWriter{contentType.ToFramingTyped(), &nopCloser{}, err}
 }
 
 type errWriter struct {
-	ContentTyped
+	FramingTyped
 	Closer
 	err error
 }

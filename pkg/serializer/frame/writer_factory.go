@@ -7,7 +7,7 @@ import (
 )
 
 // Documentation below attached to NewWriter.
-func (f DefaultFactory) NewWriter(contentType ContentType, w io.Writer, opts ...WriterOption) Writer {
+func (f DefaultFactory) NewWriter(contentType FramingType, w io.Writer, opts ...WriterOption) Writer {
 	// Build the concrete options struct from defaults and modifiers
 	o := defaultWriterOpts().ApplyOptions(opts)
 	wc, hasCloser := toWriteCloser(w)
@@ -26,43 +26,43 @@ func toWriteCloser(w io.Writer) (wc io.WriteCloser, hasCloser bool) {
 	return wc, hasCloser
 }
 
-func (DefaultFactory) newFromWriteCloser(contentType ContentType, wc io.WriteCloser, o *WriterOptions) Writer {
+func (DefaultFactory) newFromWriteCloser(contentType FramingType, wc io.WriteCloser, o *WriterOptions) Writer {
 	switch contentType {
-	case ContentTypeYAML:
+	case FramingTypeYAML:
 		return newDelegatingWriter(contentType, json.YAMLFramer.NewFrameWriter(wc), wc, o)
-	case ContentTypeJSON:
+	case FramingTypeJSON:
 		return newDelegatingWriter(contentType, json.Framer.NewFrameWriter(wc), wc, o)
 	default:
 		// If only one frame is allowed, there is no need to frame.
 		if o.MaxFrames == 1 {
 			return newSingleWriter(contentType, wc, o)
 		}
-		return newErrWriter(contentType, MakeUnsupportedContentTypeError(contentType))
+		return newErrWriter(contentType, MakeUnsupportedFramingTypeError(contentType))
 	}
 }
 
 // defaultWriterFactory is the variable used in public methods.
 var defaultWriterFactory WriterFactory = DefaultFactory{}
 
-// NewWriter returns a new Writer for the given Writer and ContentType.
+// NewWriter returns a new Writer for the given Writer and FramingType.
 // The returned Writer is thread-safe.
-func NewWriter(contentType ContentType, w io.Writer, opts ...WriterOption) Writer {
+func NewWriter(contentType FramingType, w io.Writer, opts ...WriterOption) Writer {
 	return defaultWriterFactory.NewWriter(contentType, w, opts...)
 }
 
 // NewYAMLWriter returns a Writer that writes YAML frames separated by "---\n"
 //
-// This call is the same as NewWriter(ContentTypeYAML, w, opts...)
+// This call is the same as NewWriter(FramingTypeYAML, w, opts...)
 func NewYAMLWriter(w io.Writer, opts ...WriterOption) Writer {
-	return NewWriter(ContentTypeYAML, w, opts...)
+	return NewWriter(FramingTypeYAML, w, opts...)
 }
 
 // NewJSONWriter returns a Writer that writes JSON frames without separation
 // (i.e. "{ ... }{ ... }{ ... }" on the wire)
 //
-// This call is the same as NewWriter(ContentTypeYAML, w)
+// This call is the same as NewWriter(FramingTypeYAML, w)
 func NewJSONWriter(w io.Writer, opts ...WriterOption) Writer {
-	return NewWriter(ContentTypeJSON, w, opts...)
+	return NewWriter(FramingTypeJSON, w, opts...)
 }
 
 type nopWriteCloser struct{ io.Writer }

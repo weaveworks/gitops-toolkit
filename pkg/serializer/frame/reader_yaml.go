@@ -63,5 +63,5 @@ func (r *yamlReader) ReadFrame(context.Context) ([]byte, error) {
 	return frame, nil
 }
 
-func (r *yamlReader) ContentType() ContentType    { return ContentTypeYAML }
+func (r *yamlReader) FramingType() FramingType    { return FramingTypeYAML }
 func (r *yamlReader) Close(context.Context) error { return r.closer.Close() }

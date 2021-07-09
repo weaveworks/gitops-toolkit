@@ -8,42 +8,42 @@ import (
 )
 
 var (
-	// ErrUnsupportedContentType is returned if the specified content type isn't supported
-	ErrUnsupportedContentType = errors.New("unsupported content type")
+	// ErrUnsupportedFramingType is returned if the specified content type isn't supported
+	ErrUnsupportedFramingType = errors.New("unsupported content type")
 )
 
-// MakeUnsupportedContentTypeError returns a wrapped ErrUnsupportedContentType along with
+// MakeUnsupportedFramingTypeError returns a wrapped ErrUnsupportedFramingType along with
 // context in a normalized way.
-func MakeUnsupportedContentTypeError(ct ContentType) error {
-	return fmt.Errorf("%w: %q", ErrUnsupportedContentType, ct)
+func MakeUnsupportedFramingTypeError(ct FramingType) error {
+	return fmt.Errorf("%w: %q", ErrUnsupportedFramingType, ct)
 }
 
-// ContentType specifies the content type for Writers and Readers
-type ContentType string
+// FramingType specifies the content type for Writers and Readers
+type FramingType string
 
 const (
-	// ContentTypeJSON specifies usage of JSON as the content type.
-	// It is an alias for k8s.io/apimachinery/pkg/runtime.ContentTypeJSON
-	ContentTypeJSON = ContentType(runtime.ContentTypeJSON)
+	// FramingTypeJSON specifies usage of JSON as the content type.
+	// It is an alias for k8s.io/apimachinery/pkg/runtime.FramingTypeJSON
+	FramingTypeJSON = FramingType(runtime.FramingTypeJSON)
 
-	// ContentTypeYAML specifies usage of YAML as the content type.
-	// It is an alias for k8s.io/apimachinery/pkg/runtime.ContentTypeYAML
-	ContentTypeYAML = ContentType(runtime.ContentTypeYAML)
+	// FramingTypeYAML specifies usage of YAML as the content type.
+	// It is an alias for k8s.io/apimachinery/pkg/runtime.FramingTypeYAML
+	FramingTypeYAML = FramingType(runtime.FramingTypeYAML)
 )
 
-func (ct ContentType) ContentType() ContentType     { return ct }
-func (ct ContentType) ToContentTyped() ContentTyped { return &contentTyped{ct} }
+func (ct FramingType) FramingType() FramingType     { return ct }
+func (ct FramingType) ToFramingTyped() FramingTyped { return &contentTyped{ct} }
 
-// ContentTyped is an interface for objects that are specific to a ContentType.
-type ContentTyped interface {
-	// ContentType returns the supported/used/relevant ContentType (e.g. ContentTypeYAML or ContentTypeJSON).
-	ContentType() ContentType
+// FramingTyped is an interface for objects that are specific to a FramingType.
+type FramingTyped interface {
+	// FramingType returns the supported/used/relevant FramingType (e.g. FramingTypeYAML or FramingTypeJSON).
+	FramingType() FramingType
 }
 
-// ContentType implements the ContentTyped interface.
-var _ ContentTyped = ContentType("")
+// FramingType implements the FramingTyped interface.
+var _ FramingTyped = FramingType("")
 
-// contentTyped is a helper struct that implements the ContentTyped interface.
-type contentTyped struct{ contentType ContentType }
+// contentTyped is a helper struct that implements the FramingTyped interface.
+type contentTyped struct{ contentType FramingType }
 
-func (ct *contentTyped) ContentType() ContentType { return ct.contentType }
+func (ct *contentTyped) FramingType() FramingType { return ct.contentType }

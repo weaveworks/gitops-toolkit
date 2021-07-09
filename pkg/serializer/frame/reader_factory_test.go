@@ -19,10 +19,10 @@ var (
 )
 
 func TestNewReader_Unrecognized(t *testing.T) {
-	fr := NewReader(ContentType("doesnotexist"), customErrIoReadCloser)
+	fr := NewReader(FramingType("doesnotexist"), customErrIoReadCloser)
 	ctx := context.Background()
 	frame, err := fr.ReadFrame(ctx)
-	assert.ErrorIs(t, err, ErrUnsupportedContentType)
+	assert.ErrorIs(t, err, ErrUnsupportedFramingType)
 	assert.Len(t, frame, 0)
 }
 

@@ -6,13 +6,13 @@ import "bytes"
 // its work correctly if frame actually only contains one frame within.
 type Sanitizer interface {
 	// Sanitize sanitizes the frame in a standardized way for the given
-	// ContentType. If the ContentType isn't known, the Sanitizer can choose between
-	// returning an ErrUnsupportedContentType error or just returning frame, nil unmodified.
-	// If ErrUnsupportedContentType is returned, the consumer won't probably be able to handle
+	// FramingType. If the FramingType isn't known, the Sanitizer can choose between
+	// returning an ErrUnsupportedFramingType error or just returning frame, nil unmodified.
+	// If ErrUnsupportedFramingType is returned, the consumer won't probably be able to handle
 	// other content types than the default ones, which might not be desired.
 	//
 	// The returned frame should have len == 0 if it's considered empty.
-	Sanitize(ct ContentType, frame []byte) ([]byte, error)
+	Sanitize(ct FramingType, frame []byte) ([]byte, error)
 }
 
 // DefaultSanitizer implements frame sanitation for JSON and YAML.
@@ -24,11 +24,11 @@ type Sanitizer interface {
 // For JSON it sanitizes the JSON frame by removing unnecessary spaces and newlines around it.
 type DefaultSanitizer struct{}
 
-func (DefaultSanitizer) Sanitize(ct ContentType, frame []byte) ([]byte, error) {
+func (DefaultSanitizer) Sanitize(ct FramingType, frame []byte) ([]byte, error) {
 	switch ct {
-	case ContentTypeYAML:
+	case FramingTypeYAML:
 		return sanitizeYAMLFrame(frame), nil
-	case ContentTypeJSON:
+	case FramingTypeJSON:
 		return sanitizeJSONFrame(frame), nil
 	default:
 		// Just passthrough

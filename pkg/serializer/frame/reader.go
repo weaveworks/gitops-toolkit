@@ -83,7 +83,7 @@ func (r *highlevelReader) readFrame(ctx context.Context) ([]byte, error) {
 	}
 
 	// Sanitize the frame.
-	frame, err = r.opts.Sanitizer.Sanitize(r.ContentType(), frame)
+	frame, err = r.opts.Sanitizer.Sanitize(r.FramingType(), frame)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +102,7 @@ func (r *highlevelReader) readFrame(ctx context.Context) ([]byte, error) {
 	return frame, nil
 }
 
-func (r *highlevelReader) ContentType() ContentType { return r.read.ContentType() }
+func (r *highlevelReader) FramingType() FramingType { return r.read.FramingType() }
 func (r *highlevelReader) Close(ctx context.Context) error {
 	return closeWithTrace(ctx, r.opts.Tracer, r.read, r.hasCloser).Register()
 }

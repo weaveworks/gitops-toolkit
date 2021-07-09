@@ -45,7 +45,7 @@ func (w *highlevelWriter) WriteFrame(ctx context.Context, frame []byte) error {
 		// Sanitize the frame
 		// TODO: Maybe create a composite writer that actually reads the given frame first, to
 		// fully sanitize/validate it, and first then write the frames out using the writer?
-		frame, err := w.opts.Sanitizer.Sanitize(w.ContentType(), frame)
+		frame, err := w.opts.Sanitizer.Sanitize(w.FramingType(), frame)
 		if err != nil {
 			return err
 		}
@@ -68,7 +68,7 @@ func (w *highlevelWriter) WriteFrame(ctx context.Context, frame []byte) error {
 	// handleIoError registers io.EOF as an "event", and other errors as "unknown errors" in the trace
 }
 
-func (w *highlevelWriter) ContentType() ContentType { return w.writer.ContentType() }
+func (w *highlevelWriter) FramingType() FramingType { return w.writer.FramingType() }
 func (w *highlevelWriter) Close(ctx context.Context) error {
 	return closeWithTrace(ctx, w.opts.Tracer, w.writer, w.hasCloser).Register()
 }
