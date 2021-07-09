@@ -7,12 +7,12 @@ import (
 )
 
 // Documentation below attached to NewWriter.
-func (f DefaultFactory) NewWriter(contentType FramingType, w io.Writer, opts ...WriterOption) Writer {
+func (f DefaultFactory) NewWriter(framingType FramingType, w io.Writer, opts ...WriterOption) Writer {
 	// Build the concrete options struct from defaults and modifiers
 	o := defaultWriterOpts().ApplyOptions(opts)
 	wc, hasCloser := toWriteCloser(w)
 	// Wrap the writer in a layer that provides tracing and mutex capabilities
-	return newHighlevelWriter(f.newFromWriteCloser(contentType, wc, o), hasCloser, o)
+	return newHighlevelWriter(f.newFromWriteCloser(framingType, wc, o), hasCloser, o)
 }
 
 func toWriteCloser(w io.Writer) (wc io.WriteCloser, hasCloser bool) {
@@ -26,18 +26,18 @@ func toWriteCloser(w io.Writer) (wc io.WriteCloser, hasCloser bool) {
 	return wc, hasCloser
 }
 
-func (DefaultFactory) newFromWriteCloser(contentType FramingType, wc io.WriteCloser, o *WriterOptions) Writer {
-	switch contentType {
+func (DefaultFactory) newFromWriteCloser(framingType FramingType, wc io.WriteCloser, o *WriterOptions) Writer {
+	switch framingType {
 	case FramingTypeYAML:
-		return newDelegatingWriter(contentType, json.YAMLFramer.NewFrameWriter(wc), wc, o)
+		return newDelegatingWriter(framingType, json.YAMLFramer.NewFrameWriter(wc), wc, o)
 	case FramingTypeJSON:
-		return newDelegatingWriter(contentType, json.Framer.NewFrameWriter(wc), wc, o)
+		return newDelegatingWriter(framingType, json.Framer.NewFrameWriter(wc), wc, o)
 	default:
 		// If only one frame is allowed, there is no need to frame.
 		if o.MaxFrames == 1 {
-			return newSingleWriter(contentType, wc, o)
+			return newSingleWriter(framingType, wc, o)
 		}
-		return newErrWriter(contentType, MakeUnsupportedFramingTypeError(contentType))
+		return newErrWriter(framingType, MakeUnsupportedFramingTypeError(framingType))
 	}
 }
 
@@ -46,8 +46,8 @@ var defaultWriterFactory WriterFactory = DefaultFactory{}
 
 // NewWriter returns a new Writer for the given Writer and FramingType.
 // The returned Writer is thread-safe.
-func NewWriter(contentType FramingType, w io.Writer, opts ...WriterOption) Writer {
-	return defaultWriterFactory.NewWriter(contentType, w, opts...)
+func NewWriter(framingType FramingType, w io.Writer, opts ...WriterOption) Writer {
+	return defaultWriterFactory.NewWriter(framingType, w, opts...)
 }
 
 // NewYAMLWriter returns a Writer that writes YAML frames separated by "---\n"

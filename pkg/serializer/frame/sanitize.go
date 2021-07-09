@@ -9,7 +9,7 @@ type Sanitizer interface {
 	// FramingType. If the FramingType isn't known, the Sanitizer can choose between
 	// returning an ErrUnsupportedFramingType error or just returning frame, nil unmodified.
 	// If ErrUnsupportedFramingType is returned, the consumer won't probably be able to handle
-	// other content types than the default ones, which might not be desired.
+	// other framing types than the default ones, which might not be desired.
 	//
 	// The returned frame should have len == 0 if it's considered empty.
 	Sanitize(ct FramingType, frame []byte) ([]byte, error)

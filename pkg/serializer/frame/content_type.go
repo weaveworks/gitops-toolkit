@@ -8,8 +8,8 @@ import (
 )
 
 var (
-	// ErrUnsupportedFramingType is returned if the specified content type isn't supported
-	ErrUnsupportedFramingType = errors.New("unsupported content type")
+	// ErrUnsupportedFramingType is returned if the specified framing type isn't supported
+	ErrUnsupportedFramingType = errors.New("unsupported framing type")
 )
 
 // MakeUnsupportedFramingTypeError returns a wrapped ErrUnsupportedFramingType along with
@@ -32,7 +32,7 @@ const (
 )
 
 func (ct FramingType) FramingType() FramingType     { return ct }
-func (ct FramingType) ToFramingTyped() FramingTyped { return &contentTyped{ct} }
+func (ct FramingType) ToFramingTyped() FramingTyped { return &framingTyped{ct} }
 
 // FramingTyped is an interface for objects that are specific to a FramingType.
 type FramingTyped interface {
@@ -43,7 +43,7 @@ type FramingTyped interface {
 // FramingType implements the FramingTyped interface.
 var _ FramingTyped = FramingType("")
 
-// contentTyped is a helper struct that implements the FramingTyped interface.
-type contentTyped struct{ contentType FramingType }
+// framingTyped is a helper struct that implements the FramingTyped interface.
+type framingTyped struct{ framingType FramingType }
 
-func (ct *contentTyped) FramingType() FramingType { return ct.contentType }
+func (ct *framingTyped) FramingType() FramingType { return ct.framingType }

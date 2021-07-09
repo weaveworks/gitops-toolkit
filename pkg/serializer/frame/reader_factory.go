@@ -14,13 +14,13 @@ import (
 // will write the given frame to the underlying io.Writer as-is.
 type DefaultFactory struct{}
 
-func (f DefaultFactory) NewReader(contentType FramingType, r io.Reader, opts ...ReaderOption) Reader {
+func (f DefaultFactory) NewReader(framingType FramingType, r io.Reader, opts ...ReaderOption) Reader {
 	// Build the options from the defaults
 	o := defaultReaderOpts().ApplyOptions(opts)
 	// Wrap r in a io.NopCloser if it isn't closable. Mark os.Std{in,out,err} as not closable.
 	rc, hasCloser := toReadCloser(r)
 	// Wrap the low-level Reader from lowlevelFromReadCloser in a composite highlevelReader applying common policy
-	return newHighlevelReader(f.lowlevelFromReadCloser(contentType, rc, o), hasCloser, o)
+	return newHighlevelReader(f.lowlevelFromReadCloser(framingType, rc, o), hasCloser, o)
 }
 
 func toReadCloser(r io.Reader) (rc io.ReadCloser, hasCloser bool) {
@@ -35,8 +35,8 @@ func toReadCloser(r io.Reader) (rc io.ReadCloser, hasCloser bool) {
 	return rc, hasCloser
 }
 
-func (DefaultFactory) lowlevelFromReadCloser(contentType FramingType, rc io.ReadCloser, o *ReaderOptions) Reader {
-	switch contentType {
+func (DefaultFactory) lowlevelFromReadCloser(framingType FramingType, rc io.ReadCloser, o *ReaderOptions) Reader {
+	switch framingType {
 	case FramingTypeYAML:
 		return newYAMLReader(rc, o)
 	case FramingTypeJSON:
@@ -44,9 +44,9 @@ func (DefaultFactory) lowlevelFromReadCloser(contentType FramingType, rc io.Read
 	default:
 		// If only one frame is allowed, there is no need to frame.
 		if o.MaxFrames == 1 {
-			return newSingleReader(contentType, rc, o)
+			return newSingleReader(framingType, rc, o)
 		}
-		return newErrReader(contentType, MakeUnsupportedFramingTypeError(contentType))
+		return newErrReader(framingType, MakeUnsupportedFramingTypeError(framingType))
 	}
 }
 
@@ -55,9 +55,9 @@ var defaultReaderFactory ReaderFactory = DefaultFactory{}
 
 // NewReader returns a Reader for the given FramingType and underlying io.Read(Clos)er.
 //
-// This is a shorthand for DefaultFactory{}.NewReader(contentType, r, opts...)
-func NewReader(contentType FramingType, r io.Reader, opts ...ReaderOption) Reader {
-	return defaultReaderFactory.NewReader(contentType, r, opts...)
+// This is a shorthand for DefaultFactory{}.NewReader(framingType, r, opts...)
+func NewReader(framingType FramingType, r io.Reader, opts ...ReaderOption) Reader {
+	return defaultReaderFactory.NewReader(framingType, r, opts...)
 }
 
 // NewYAMLReader returns a Reader that supports both YAML and JSON. Frames are separated by "---\n"
@@ -75,8 +75,8 @@ func NewJSONReader(r io.Reader, opts ...ReaderOption) Reader {
 	return NewReader(FramingTypeJSON, r, opts...)
 }
 
-func newErrReader(contentType FramingType, err error) Reader {
-	return &errReader{contentType.ToFramingTyped(), &nopCloser{}, err}
+func newErrReader(framingType FramingType, err error) Reader {
+	return &errReader{framingType.ToFramingTyped(), &nopCloser{}, err}
 }
 
 // errReader always returns an error

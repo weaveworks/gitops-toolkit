@@ -303,9 +303,9 @@ var defaultTestCases = []testcase{
 		readResults: []error{nil, nil, io.EOF, io.EOF},
 		readOpts:    []ReaderOption{&ReaderWriterOptions{MaxFrames: 2}},
 	},
-	// Other Content Types
+	// Other Framing Types
 	{
-		name: "Roundtrip: Allow reading other content types when MaxFrames == 1, check overflows too",
+		name: "Roundtrip: Allow reading other framing types when MaxFrames == 1, check overflows too",
 		testdata: []testdata{
 			{ct: otherCT, rawData: otherFrame, frames: []string{otherFrame}},
 		},
@@ -315,7 +315,7 @@ var defaultTestCases = []testcase{
 		readOpts:     []ReaderOption{&ReaderWriterOptions{MaxFrames: 1}},
 	},
 	{
-		name: "Read: other content type frame size is exactly within bounds",
+		name: "Read: other framing type frame size is exactly within bounds",
 		testdata: []testdata{
 			{ct: otherCT, rawData: otherFrame, frames: []string{otherFrame}},
 		},
@@ -323,7 +323,7 @@ var defaultTestCases = []testcase{
 		readResults: []error{nil, io.EOF},
 	},
 	{
-		name: "Read: other content type frame size overflow",
+		name: "Read: other framing type frame size overflow",
 		testdata: []testdata{
 			{ct: otherCT, rawData: otherFrame},
 		},
@@ -331,7 +331,7 @@ var defaultTestCases = []testcase{
 		readResults: []error{ErrFrameSizeOverflow, io.EOF, io.EOF},
 	},
 	{
-		name: "Write: other content type frame size overflow",
+		name: "Write: other framing type frame size overflow",
 		testdata: []testdata{
 			{ct: otherCT, frames: []string{otherFrame, otherFrame}},
 		},

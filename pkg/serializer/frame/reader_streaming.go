@@ -24,11 +24,11 @@ func newJSONReader(rc io.ReadCloser, o *ReaderOptions) Reader {
 //
 // Note: This Reader is a so-called "low-level" one. It doesn't do tracing, mutex locking, or
 // proper closing logic. It must be wrapped by a composite, high-level Reader like highlevelReader.
-func newStreamingReader(contentType FramingType, rc io.ReadCloser, o *ReaderOptions) Reader {
+func newStreamingReader(framingType FramingType, rc io.ReadCloser, o *ReaderOptions) Reader {
 	// Limit the amount of bytes that can be read in one frame
 	lr := NewIoLimitedReader(rc, o.MaxFrameSize)
 	return &streamingReader{
-		FramingTyped: contentType.ToFramingTyped(),
+		FramingTyped: framingType.ToFramingTyped(),
 		lr:           lr,
 		streamReader: newK8sStreamingReader(ioReadCloser{lr, rc}, o.MaxFrameSize),
 		maxFrameSize: o.MaxFrameSize,

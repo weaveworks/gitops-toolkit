@@ -5,17 +5,17 @@ import (
 	"io"
 )
 
-func newSingleReader(contentType FramingType, rc io.ReadCloser, o *ReaderOptions) Reader {
+func newSingleReader(framingType FramingType, rc io.ReadCloser, o *ReaderOptions) Reader {
 	return &singleReader{
-		FramingTyped: contentType.ToFramingTyped(),
+		FramingTyped: framingType.ToFramingTyped(),
 		r:            NewIoLimitedReader(rc, o.MaxFrameSize),
 		c:            rc,
 	}
 }
 
-func newSingleWriter(contentType FramingType, wc io.WriteCloser, _ *WriterOptions) Writer {
+func newSingleWriter(framingType FramingType, wc io.WriteCloser, _ *WriterOptions) Writer {
 	return &singleWriter{
-		FramingTyped: contentType.ToFramingTyped(),
+		FramingTyped: framingType.ToFramingTyped(),
 		wc:           wc,
 	}
 }

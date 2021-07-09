@@ -16,11 +16,11 @@ type Closer interface {
 	Close(ctx context.Context) error
 }
 
-// Reader is a content-type specific reader of an underlying io.Reader or io.ReadCloser.
+// Reader is a framing type specific reader of an underlying io.Reader or io.ReadCloser.
 // If an io.Reader is used, Close(ctx) is a no-op. If an io.ReadCloser is used, Close(ctx)
 // will close the underlying io.ReadCloser.
 //
-// The Reader returns frames, as defined by the relevant content type.
+// The Reader returns frames, as defined by the relevant framing type.
 // For example, for YAML a frame represents a YAML document, while JSON is a self-framing
 // format, i.e. encoded objects can be written to a stream just as
 // '{ "a": "" ... }{ "b": "" ... }' and separated from there.
@@ -49,7 +49,7 @@ type Closer interface {
 // The Reader MAY respect cancellation signals on the context, depending on ReaderOptions.
 // The Reader MAY support reporting trace spans for how long certain operations take.
 type Reader interface {
-	// The Reader is specific to this content type
+	// The Reader is specific to this framing type
 	FramingTyped
 	// ReadFrame reads one frame from the underlying io.Read(Clos)er. At maximum, the frame is as
 	// large as ReadWriterOptions.MaxFrameSize. See the documentation on the Reader interface for more
@@ -68,16 +68,16 @@ type ReaderFactory interface {
 	// The options are parsed in order, and the latter options override the former.
 	// The given io.Reader can also be a io.ReadCloser, and if so, Reader.Close(ctx)
 	// will close that io.ReadCloser.
-	// The ReaderFactory might allow any contentType as long as ReaderOptions.MaxFrames
+	// The ReaderFactory might allow any framingType as long as ReaderOptions.MaxFrames
 	// is 1, because then there might not be a need to perform framing.
-	NewReader(contentType FramingType, r io.Reader, opts ...ReaderOption) Reader
+	NewReader(framingType FramingType, r io.Reader, opts ...ReaderOption) Reader
 }
 
-// Writer is a content-type specific writer to an underlying io.Writer or io.WriteCloser.
+// Writer is a framing type specific writer to an underlying io.Writer or io.WriteCloser.
 // If an io.Writer is used, Close(ctx) is a no-op. If an io.WriteCloser is used, Close(ctx)
 // will close the underlying io.WriteCloser.
 //
-// The Writer writes frames to the underlying stream, as defined by the content type.
+// The Writer writes frames to the underlying stream, as defined by the framing type.
 // For example, for YAML a frame represents a YAML document, while JSON is a self-framing
 // format, i.e. encoded objects can be written to a stream just as
 // '{ "a": "" ... }{ "b": "" ... }'.
@@ -102,7 +102,7 @@ type ReaderFactory interface {
 // The Writer MAY respect cancellation signals on the context, depending on WriterOptions.
 // The Writer MAY support reporting trace spans for how long certain operations take.
 type Writer interface {
-	// The Reader is specific to this content type
+	// The Reader is specific to this framing type
 	FramingTyped
 	// WriteFrame writes one frame to the underlying io.Write(Close)r.
 	// See the documentation on the Writer interface for more details.
@@ -119,9 +119,9 @@ type WriterFactory interface {
 	// The options are parsed in order, and the latter options override the former.
 	// The given io.Writer can also be a io.WriteCloser, and if so, Writer.Close(ctx)
 	// will close that io.WriteCloser.
-	// The WriterFactory might allow any contentType as long as WriterOptions.MaxFrames
+	// The WriterFactory might allow any framingType as long as WriterOptions.MaxFrames
 	// is 1, because then there might not be a need to perform framing.
-	NewWriter(contentType FramingType, w io.Writer, opts ...WriterOption) Writer
+	NewWriter(framingType FramingType, w io.Writer, opts ...WriterOption) Writer
 }
 
 // Factory combines ReaderFactory and WriterFactory.
