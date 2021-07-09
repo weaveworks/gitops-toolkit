@@ -26,10 +26,10 @@ var (
 
 // tryToPreserveComments tries to save the original file data (base64-encoded) into an annotation.
 // This original file data can be used at encoding-time to preserve comments
-func (d *decoder) tryToPreserveComments(doc []byte, obj runtime.Object, ct frame.ContentType) {
+func (d *decoder) tryToPreserveComments(doc []byte, obj runtime.Object, ct frame.FramingType) {
 	// If the user opted into preserving comments and the format is YAML, proceed
 	// If they didn't, return directly
-	if !(*d.opts.PreserveComments && ct == frame.ContentTypeYAML) {
+	if !(*d.opts.PreserveComments && ct == frame.FramingTypeYAML) {
 		return
 	}
 
@@ -49,8 +49,8 @@ func (e *encoder) encodeWithCommentSupport(versionEncoder runtime.Encoder, fw fr
 	}
 
 	// The user requested to preserve comments, but content type is not YAML, so log, sanitize and return
-	if fw.ContentType() != frame.ContentTypeYAML {
-		logrus.Debugf("Asked to preserve comments, but frame.ContentType is not YAML, so ignoring")
+	if fw.FramingType() != frame.FramingTypeYAML {
+		logrus.Debugf("Asked to preserve comments, but frame.FramingType is not YAML, so ignoring")
 
 		// Normal encoding without the annotation (so it doesn't leak by accident)
 		return noAnnotationWrapper(metaObj, e.normalEncodeFunc(versionEncoder, fw, obj))

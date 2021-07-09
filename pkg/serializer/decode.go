@@ -40,7 +40,7 @@ type DecodingOptions struct {
 	DecodeListElements *bool
 
 	// Whether to preserve YAML comments internally. This only works for objects embedding metav1.ObjectMeta.
-	// Only applicable to frame.ContentTypeYAML framers.
+	// Only applicable to frame.FramingTypeYAML framers.
 	// Using any other framer will be silently ignored. Usage of this option also requires setting
 	// the PreserveComments in EncodingOptions, too. (Default: false)
 	PreserveComments *bool
@@ -146,10 +146,10 @@ func (d *decoder) Decode(fr frame.Reader) (runtime.Object, error) {
 	if err != nil {
 		return nil, err
 	}
-	return d.decode(doc, nil, fr.ContentType())
+	return d.decode(doc, nil, fr.FramingType())
 }
 
-func (d *decoder) decode(doc []byte, into runtime.Object, ct frame.ContentType) (runtime.Object, error) {
+func (d *decoder) decode(doc []byte, into runtime.Object, ct frame.FramingType) (runtime.Object, error) {
 	// If the scheme doesn't recognize a v1.List, and we enabled opts.DecodeListElements,
 	// make the scheme able to decode the v1.List automatically
 	if *d.opts.DecodeListElements && !d.scheme.Recognizes(listGVK) {
@@ -220,7 +220,7 @@ func (d *decoder) DecodeInto(fr frame.Reader, into runtime.Object) error {
 	}
 
 	// Run the internal decode() and pass the into object
-	_, err = d.decode(doc, into, fr.ContentType())
+	_, err = d.decode(doc, into, fr.FramingType())
 	return err
 }
 
@@ -252,7 +252,7 @@ func (d *decoder) DecodeAll(fr frame.Reader) ([]runtime.Object, error) {
 
 		// Extract possibly nested objects within the one we got (e.g. unwrapping lists if asked to),
 		// or just no-op and return the object given for addition to the larger list
-		nestedObjs, err := d.extractNestedObjects(obj, fr.ContentType())
+		nestedObjs, err := d.extractNestedObjects(obj, fr.FramingType())
 		if err != nil {
 			return nil, err
 		}
@@ -262,7 +262,7 @@ func (d *decoder) DecodeAll(fr frame.Reader) ([]runtime.Object, error) {
 }
 
 // decodeUnknown decodes bytes of a certain content type into a returned *runtime.Unknown object
-func (d *decoder) decodeUnknown(doc []byte, ct frame.ContentType) (runtime.Object, error) {
+func (d *decoder) decodeUnknown(doc []byte, ct frame.FramingType) (runtime.Object, error) {
 	// Do a DecodeInto the new pointer to the object we've got. The resulting into object is
 	// also returned.
 	// The content type isn't really used here, as runtime.Unknown will never implement
@@ -299,7 +299,7 @@ func (d *decoder) handleDecodeError(doc []byte, origErr error) error {
 	return origErr
 }
 
-func (d *decoder) extractNestedObjects(obj runtime.Object, ct frame.ContentType) ([]runtime.Object, error) {
+func (d *decoder) extractNestedObjects(obj runtime.Object, ct frame.FramingType) ([]runtime.Object, error) {
 	// If we didn't ask for list-unwrapping functionality, return directly
 	if !*d.opts.DecodeListElements {
 		return []runtime.Object{obj}, nil

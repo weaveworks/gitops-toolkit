@@ -49,14 +49,14 @@ type schemeAndCodec struct {
 // to a frame.Writer.
 type Encoder interface {
 	// Encode encodes the given objects and writes them to the specified frame.Writer.
-	// The frame.Writer specifies the frame.ContentType. This encoder will automatically convert any
+	// The frame.Writer specifies the frame.FramingType. This encoder will automatically convert any
 	// internal object given to the preferred external groupversion. No conversion will happen
 	// if the given object is of an external version.
 	Encode(fw frame.Writer, obj ...runtime.Object) error
 
 	// EncodeForGroupVersion encodes the given object for the specific groupversion. If the object
 	// is not of that version currently it will try to convert. The output bytes are written to the
-	// frame.Writer. The frame.Writer specifies the frame.ContentType.
+	// frame.Writer. The frame.Writer specifies the frame.FramingType.
 	EncodeForGroupVersion(fw frame.Writer, obj runtime.Object, gv schema.GroupVersion) error
 }
 

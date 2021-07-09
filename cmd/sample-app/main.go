@@ -41,7 +41,7 @@ func run() error {
 	logs.Logger.SetLevel(logrus.InfoLevel)
 
 	plainStorage := storage.NewGenericStorage(
-		storage.NewGenericRawStorage(*manifestDirFlag, v1alpha1.SchemeGroupVersion, frame.ContentTypeYAML),
+		storage.NewGenericRawStorage(*manifestDirFlag, v1alpha1.SchemeGroupVersion, frame.FramingTypeYAML),
 		scheme.Serializer,
 		[]runtime.IdentifierFactory{runtime.Metav1NameIdentifier},
 	)

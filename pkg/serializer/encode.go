@@ -15,7 +15,7 @@ type EncodingOptions struct {
 	// TODO: Fix that sometimes omitempty fields aren't respected
 	Pretty *bool
 	// Whether to preserve YAML comments internally. This only works for objects embedding metav1.ObjectMeta.
-	// Only applicable to frame.ContentTypeYAML framers.
+	// Only applicable to frame.FramingTypeYAML framers.
 	// Using any other framer will be silently ignored. Usage of this option also requires setting
 	// the PreserveComments in DecodingOptions, too. (Default: false)
 	// TODO: Make this a BestEffort & Strict mode
@@ -74,7 +74,7 @@ func newEncoder(schemeAndCodec *schemeAndCodec, opts EncodingOptions) Encoder {
 }
 
 // Encode encodes the given objects and writes them to the specified frame.Writer.
-// The frame.Writer specifies the frame.ContentType. This encoder will automatically convert any
+// The frame.Writer specifies the frame.FramingType. This encoder will automatically convert any
 // internal object given to the preferred external groupversion. No conversion will happen
 // if the given object is of an external version.
 // TODO: This should automatically convert to the preferred version
@@ -105,12 +105,12 @@ func (e *encoder) Encode(fw frame.Writer, objs ...runtime.Object) error {
 
 // EncodeForGroupVersion encodes the given object for the specific groupversion. If the object
 // is not of that version currently it will try to convert. The output bytes are written to the
-// frame.Writer. The frame.Writer specifies the frame.ContentType.
+// frame.Writer. The frame.Writer specifies the frame.FramingType.
 func (e *encoder) EncodeForGroupVersion(fw frame.Writer, obj runtime.Object, gv schema.GroupVersion) error {
 	// Get the serializer for the media type
-	serializerInfo, ok := runtime.SerializerInfoForMediaType(e.codecs.SupportedMediaTypes(), string(fw.ContentType()))
+	serializerInfo, ok := runtime.SerializerInfoForMediaType(e.codecs.SupportedMediaTypes(), string(fw.FramingType()))
 	if !ok {
-		return frame.ErrUnsupportedContentType
+		return frame.MakeUnsupportedFramingTypeError(fw.FramingType())
 	}
 
 	// Choose the pretty or non-pretty one
@@ -123,7 +123,7 @@ func (e *encoder) EncodeForGroupVersion(fw frame.Writer, obj runtime.Object, gv 
 		if serializerInfo.PrettySerializer != nil {
 			encoder = serializerInfo.PrettySerializer
 		} else {
-			logrus.Debugf("PrettySerializer for frame.ContentType %s is nil, falling back to Serializer.", fw.ContentType())
+			logrus.Debugf("PrettySerializer for frame.FramingType %s is nil, falling back to Serializer.", fw.FramingType())
 		}
 	}
 

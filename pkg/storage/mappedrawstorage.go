@@ -133,7 +133,7 @@ func (r *GenericMappedRawStorage) Checksum(key ObjectKey) (string, error) {
 	return checksumFromModTime(path)
 }
 
-func (r *GenericMappedRawStorage) ContentType(key ObjectKey) (ct frame.ContentType) {
+func (r *GenericMappedRawStorage) ContentType(key ObjectKey) (ct frame.FramingType) {
 	if file, err := r.realPath(key); err == nil {
 		ct = ContentTypes[filepath.Ext(file)] // Retrieve the correct format based on the extension
 	}

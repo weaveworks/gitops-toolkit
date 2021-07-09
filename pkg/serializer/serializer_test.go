@@ -354,18 +354,18 @@ func TestEncode(t *testing.T) {
 	newCRDObj := &CRDNewVersion{OtherString: "foobar"}
 	tests := []struct {
 		name        string
-		ct          frame.ContentType
+		ct          frame.FramingType
 		objs        []runtime.Object
 		expected    []byte
 		expectedErr bool
 	}{
-		{"simple yaml", frame.ContentTypeYAML, []runtime.Object{simpleObj}, oneSimple, false},
-		{"complex yaml", frame.ContentTypeYAML, []runtime.Object{complexObj}, oneComplex, false},
-		{"both simple and complex yaml", frame.ContentTypeYAML, []runtime.Object{simpleObj, complexObj}, simpleAndComplex, false},
-		{"simple json", frame.ContentTypeJSON, []runtime.Object{simpleObj}, simpleJSON, false},
-		{"complex json", frame.ContentTypeJSON, []runtime.Object{complexObj}, complexJSON, false},
-		{"old CRD yaml", frame.ContentTypeYAML, []runtime.Object{oldCRDObj}, oldCRDNoComments, false},
-		{"new CRD yaml", frame.ContentTypeYAML, []runtime.Object{newCRDObj}, newCRDNoComments, false},
+		{"simple yaml", frame.FramingTypeYAML, []runtime.Object{simpleObj}, oneSimple, false},
+		{"complex yaml", frame.FramingTypeYAML, []runtime.Object{complexObj}, oneComplex, false},
+		{"both simple and complex yaml", frame.FramingTypeYAML, []runtime.Object{simpleObj, complexObj}, simpleAndComplex, false},
+		{"simple json", frame.FramingTypeJSON, []runtime.Object{simpleObj}, simpleJSON, false},
+		{"complex json", frame.FramingTypeJSON, []runtime.Object{complexObj}, complexJSON, false},
+		{"old CRD yaml", frame.FramingTypeYAML, []runtime.Object{oldCRDObj}, oldCRDNoComments, false},
+		{"new CRD yaml", frame.FramingTypeYAML, []runtime.Object{newCRDObj}, newCRDNoComments, false},
 		//{"no-conversion simple", defaultEncoder, &runtimetest.ExternalSimple{TestString: "foo"}, simpleJSON, false},
 		//{"support internal", defaultEncoder, []runtime.Object{simpleObj}, []byte(`{"testString":"foo"}` + "\n"), false},
 	}
@@ -554,15 +554,15 @@ func TestRoundtrip(t *testing.T) {
 	tests := []struct {
 		name string
 		data []byte
-		ct   frame.ContentType
+		ct   frame.FramingType
 		gv   *schema.GroupVersion // use a specific groupversion if set. if nil, then use the default Encode
 	}{
-		{"simple yaml", oneSimple, frame.ContentTypeYAML, nil},
-		{"complex yaml", oneComplex, frame.ContentTypeYAML, nil},
-		{"simple json", simpleJSON, frame.ContentTypeJSON, nil},
-		{"complex json", complexJSON, frame.ContentTypeJSON, nil},
-		{"crd with objectmeta & comments", oldCRD, frame.ContentTypeYAML, &ext1gv}, // encode as v1alpha1
-		{"unknown object", unrecognizedGVK, frame.ContentTypeYAML, nil},
+		{"simple yaml", oneSimple, frame.FramingTypeYAML, nil},
+		{"complex yaml", oneComplex, frame.FramingTypeYAML, nil},
+		{"simple json", simpleJSON, frame.FramingTypeJSON, nil},
+		{"complex json", complexJSON, frame.FramingTypeJSON, nil},
+		{"crd with objectmeta & comments", oldCRD, frame.FramingTypeYAML, &ext1gv}, // encode as v1alpha1
+		{"unknown object", unrecognizedGVK, frame.FramingTypeYAML, nil},
 		// TODO: Maybe an unit test (case) for a type with ObjectMeta embedded as a pointer being nil
 		// TODO: Make sure that the Encode call (with comments support) doesn't mutate the object state
 		// i.e. doesn't remove the annotation after use so multiple similar encode calls work.
@@ -701,7 +701,7 @@ func TestListRoundtrip(t *testing.T) {
 	}
 
 	buf := new(bytes.Buffer)
-	if err := defaultEncoder.Encode(frame.NewWriter(frame.ContentTypeYAML, buf), objs...); err != nil {
+	if err := defaultEncoder.Encode(frame.NewWriter(frame.FramingTypeYAML, buf), objs...); err != nil {
 		t.Fatal(err)
 	}
 	actual := buf.Bytes()

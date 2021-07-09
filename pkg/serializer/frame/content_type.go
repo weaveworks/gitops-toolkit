@@ -18,17 +18,17 @@ func MakeUnsupportedFramingTypeError(ct FramingType) error {
 	return fmt.Errorf("%w: %q", ErrUnsupportedFramingType, ct)
 }
 
-// FramingType specifies the content type for Writers and Readers
+// FramingType specifies the framing type for Writers and Readers
 type FramingType string
 
 const (
-	// FramingTypeJSON specifies usage of JSON as the content type.
-	// It is an alias for k8s.io/apimachinery/pkg/runtime.FramingTypeJSON
-	FramingTypeJSON = FramingType(runtime.FramingTypeJSON)
+	// FramingTypeJSON specifies usage of JSON as the framing type.
+	// It is an alias for k8s.io/apimachinery/pkg/runtime.ContentTypeYAML
+	FramingTypeJSON = FramingType(runtime.ContentTypeJSON)
 
-	// FramingTypeYAML specifies usage of YAML as the content type.
-	// It is an alias for k8s.io/apimachinery/pkg/runtime.FramingTypeYAML
-	FramingTypeYAML = FramingType(runtime.FramingTypeYAML)
+	// FramingTypeYAML specifies usage of YAML as the framing type.
+	// It is an alias for k8s.io/apimachinery/pkg/runtime.ContentTypeYAML
+	FramingTypeYAML = FramingType(runtime.ContentTypeYAML)
 )
 
 func (ct FramingType) FramingType() FramingType     { return ct }

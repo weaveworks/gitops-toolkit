@@ -151,7 +151,7 @@ func (s *GenericStorage) GetMeta(key ObjectKey) (runtime.PartialObject, error) {
 // TODO: Make sure we don't save a partial object
 func (s *GenericStorage) write(key ObjectKey, obj runtime.Object) error {
 	// Set the content type based on the format given by the RawStorage, but default to JSON
-	contentType := frame.ContentTypeJSON
+	contentType := frame.FramingTypeJSON
 	if ct := s.raw.ContentType(key); len(ct) != 0 {
 		contentType = ct
 	}
