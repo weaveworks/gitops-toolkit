@@ -10,7 +10,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"k8s.io/utils/pointer"
 )
 
 // TODO: Test the output traces more througoutly, when there is SpanProcessor that supports writing
@@ -38,12 +37,12 @@ type testcase struct {
 	// if closeWriterIdx or closeReaderIdx are non-nil, the Reader/Writer will be closed after the read at
 	// that specified index. closeWriterErr and closeReaderErr can be used to check the error returned by
 	// the close call.
-	closeWriterIdx        *int64
-	closeWriterErr        error
-	expectWriterNotClosed bool
-	closeReaderIdx        *int64
-	closeReaderErr        error
-	expectReaderNotCloser bool
+	closeWriterIdx *int64
+	closeWriterErr error
+	//expectWriterClosed bool
+	closeReaderIdx *int64
+	closeReaderErr error
+	//expectReaderCloser bool
 }
 
 type testdata struct {
@@ -99,6 +98,8 @@ func TestReader(t *testing.T) {
 	NewFactoryTester(t, DefaultFactory{}).Test()
 }
 
+// TODO: Test that closing of Readers and Writers works
+
 var defaultTestCases = []testcase{
 	// Roundtrip cases
 	{
@@ -107,23 +108,18 @@ var defaultTestCases = []testcase{
 			{ct: ContentTypeYAML, frames: []string{testYAML}, rawData: yamlSep + testYAML},
 			{ct: ContentTypeJSON, frames: []string{testJSON}, rawData: testJSON},
 		},
-		writeResults:   []error{nil, io.ErrClosedPipe, io.ErrClosedPipe},
-		readResults:    []error{nil, io.EOF, io.ErrClosedPipe, io.ErrClosedPipe},
-		closeWriterIdx: pointer.Int64Ptr(0), // directly close the writer after the first read
+		writeResults: []error{nil, nil, nil, nil},
+		readResults:  []error{nil, io.EOF, io.EOF, io.EOF},
 	},
+
 	{
 		name: "two-frame roundtrip with closed writer",
 		testdata: []testdata{
 			{ct: ContentTypeYAML, frames: []string{testYAML, testYAML}, rawData: yamlSep + testYAML + yamlSep + testYAML},
 			{ct: ContentTypeJSON, frames: []string{testJSON, testJSON2}, rawData: testJSON + testJSON2},
 		},
-		writeResults: []error{nil, nil, nil, io.ErrClosedPipe, io.ErrClosedPipe},
-		readResults:  []error{nil, nil, io.EOF, io.ErrClosedPipe, io.ErrClosedPipe},
-		// Close the writer manually after the 3rd call. Expect no error
-		closeWriterIdx: pointer.Int64Ptr(2),
-		// The reader will be closed already after the 3rd call due to io.EOF, but close it
-		// "again" just to test that no error is returned although already closed
-		closeReaderIdx: pointer.Int64Ptr(3),
+		writeResults: []error{nil, nil, nil, nil},
+		readResults:  []error{nil, nil, io.EOF, io.EOF},
 	},
 	// YAML newline addition
 	{
@@ -138,8 +134,7 @@ var defaultTestCases = []testcase{
 		testdata: []testdata{
 			{ct: ContentTypeYAML, frames: []string{noNewlineYAML}, rawData: yamlSep + testYAML},
 		},
-		writeResults:          []error{nil},
-		expectWriterNotClosed: true,
+		writeResults: []error{nil},
 	},
 	// Empty frames
 	{
@@ -158,8 +153,7 @@ var defaultTestCases = []testcase{
 			{ct: ContentTypeYAML, frames: []string{"---", "---\n", " \n--- \n---"}},
 			{ct: ContentTypeJSON, frames: []string{"", "    \n    ", "  "}},
 		},
-		writeResults:          []error{nil, nil, nil},
-		expectWriterNotClosed: true,
+		writeResults: []error{nil, nil, nil},
 	},
 	{
 		name: "Write: can write empty frames forever without errors",
@@ -167,9 +161,8 @@ var defaultTestCases = []testcase{
 			{ct: ContentTypeYAML, frames: []string{testYAML, testYAML}, rawData: yamlSep + testYAML + yamlSep + testYAML},
 			{ct: ContentTypeJSON, frames: []string{testJSON, testJSON2}, rawData: testJSON + testJSON2},
 		},
-		writeResults:          []error{nil, nil, nil, nil, nil},
-		readResults:           []error{nil, nil, io.EOF},
-		expectWriterNotClosed: true,
+		writeResults: []error{nil, nil, nil, nil, nil},
+		readResults:  []error{nil, nil, io.EOF},
 	},
 	// Sanitation
 	{
@@ -200,8 +193,7 @@ var defaultTestCases = []testcase{
 			{ct: ContentTypeYAML, frames: []string{messyYAMLP1, messyYAMLP2}, rawData: yamlSep + testYAML + yamlSep + testYAML},
 			{ct: ContentTypeJSON, frames: []string{messyJSONP1, messyJSONP2}, rawData: testJSON + testJSON},
 		},
-		writeResults:          []error{nil, nil},
-		expectWriterNotClosed: true,
+		writeResults: []error{nil, nil},
 	},
 	// MaxFrameSize
 	{
@@ -231,62 +223,31 @@ var defaultTestCases = []testcase{
 		readResults: []error{ErrFrameSizeOverflow},
 	},
 	{
-		name: "Read: first frame ok, then frame overflow, then ErrClosedPipe when CloseOnError == true",
+		name: "Read: first frame ok, then always frame overflow",
 		testdata: []testdata{
 			{ct: ContentTypeYAML, rawData: testYAML + yamlSep + testYAML + testYAML, frames: []string{testYAML}},
 			{ct: ContentTypeJSON, rawData: testJSON + testJSON2, frames: []string{testJSON}},
 		},
 		readOpts:    []ReaderOption{&ReaderWriterOptions{MaxFrameSize: testYAMLlen}},
-		readResults: []error{nil, ErrFrameSizeOverflow, io.ErrClosedPipe, io.ErrClosedPipe},
+		readResults: []error{nil, ErrFrameSizeOverflow, ErrFrameSizeOverflow, ErrFrameSizeOverflow},
 	},
 	{
-		name: "Write: the second frame is too large",
+		name: "Write: the second frame is too large, ignore that, but allow writing smaller frames later",
 		testdata: []testdata{
-			{ct: ContentTypeYAML, frames: []string{testYAML, testYAML + testYAML}, rawData: yamlSep + testYAML},
-			{ct: ContentTypeJSON, frames: []string{testJSON, testJSON2}, rawData: testJSON},
+			{ct: ContentTypeYAML, frames: []string{testYAML, testYAML + testYAML, testYAML}, rawData: yamlSep + testYAML + yamlSep + testYAML},
+			{ct: ContentTypeJSON, frames: []string{testJSON, testJSON2, testJSON}, rawData: testJSON + testJSON},
 		},
 		writeOpts:    []WriterOption{&ReaderWriterOptions{MaxFrameSize: testYAMLlen}},
-		writeResults: []error{nil, ErrFrameSizeOverflow, io.ErrClosedPipe},
+		writeResults: []error{nil, ErrFrameSizeOverflow, nil},
 	},
-	// CloseOnError
 	{
-		name: "first frame ok, then Read => EOF and Write => nil consistently when CloseOnError == false",
+		name: "first frame ok, then Read => EOF and Write => nil consistently",
 		testdata: []testdata{
 			{ct: ContentTypeYAML, frames: []string{testYAML}, rawData: yamlSep + testYAML},
 			{ct: ContentTypeJSON, frames: []string{testJSON}, rawData: testJSON},
 		},
-		readOpts:              []ReaderOption{&ReaderWriterOptions{CloseOnError: pointer.BoolPtr(false)}},
-		writeOpts:             []WriterOption{&ReaderWriterOptions{CloseOnError: pointer.BoolPtr(false)}},
-		readResults:           []error{nil, io.EOF, io.EOF, io.EOF, io.EOF},
-		writeResults:          []error{nil, nil, nil, nil, nil},
-		expectWriterNotClosed: true,
-		expectReaderNotCloser: true,
-	},
-	{
-		name: "Read: first frame ok, then EOF, then ErrClosedPipe when CloseOnError == true",
-		testdata: []testdata{
-			{ct: ContentTypeYAML, rawData: testYAML, frames: []string{testYAML}},
-			{ct: ContentTypeJSON, rawData: testJSON, frames: []string{testJSON}},
-		},
-		readResults: []error{nil, io.EOF, io.ErrClosedPipe, io.ErrClosedPipe, io.ErrClosedPipe},
-	},
-	{
-		name: "Read: first frame ok, then close reader, then ErrClosedPipe when CloseOnError == true",
-		testdata: []testdata{
-			{ct: ContentTypeYAML, rawData: testYAML + yamlSep + testYAML, frames: []string{testYAML}},
-			{ct: ContentTypeJSON, rawData: testJSON + testJSON, frames: []string{testJSON}},
-		},
-		readResults:    []error{nil, io.ErrClosedPipe, io.ErrClosedPipe, io.ErrClosedPipe},
-		closeReaderIdx: pointer.Int64Ptr(0),
-	},
-	{
-		name: "Write: first frame ok, then close reader, then ErrClosedPipe when CloseOnError == true",
-		testdata: []testdata{
-			{ct: ContentTypeYAML, frames: []string{testYAML, testYAML}, rawData: yamlSep + testYAML},
-			{ct: ContentTypeJSON, frames: []string{testJSON, testJSON}, rawData: testJSON},
-		},
-		writeResults:   []error{nil, io.ErrClosedPipe, io.ErrClosedPipe, io.ErrClosedPipe},
-		closeWriterIdx: pointer.Int64Ptr(0),
+		readResults:  []error{nil, io.EOF, io.EOF, io.EOF, io.EOF},
+		writeResults: []error{nil, nil, nil, nil, nil},
 	},
 	// MaxFrames
 	{
@@ -295,7 +256,7 @@ var defaultTestCases = []testcase{
 			{ct: ContentTypeYAML, frames: []string{testYAML, testYAML, testYAML}, rawData: yamlSep + testYAML + yamlSep + testYAML},
 			{ct: ContentTypeJSON, frames: []string{testJSON, testJSON, testJSON}, rawData: testJSON + testJSON},
 		},
-		writeResults: []error{nil, nil, ErrFrameCountOverflow, io.ErrClosedPipe},
+		writeResults: []error{nil, nil, ErrFrameCountOverflow, ErrFrameCountOverflow},
 		writeOpts:    []WriterOption{&ReaderWriterOptions{MaxFrames: 2}},
 	},
 	{
@@ -308,22 +269,8 @@ var defaultTestCases = []testcase{
 				rawData: testJSON + testJSON + testJSON,
 				frames:  []string{testJSON, testJSON}},
 		},
-		readResults: []error{nil, nil, ErrFrameCountOverflow, io.ErrClosedPipe},
+		readResults: []error{nil, nil, ErrFrameCountOverflow, ErrFrameCountOverflow},
 		readOpts:    []ReaderOption{&ReaderWriterOptions{MaxFrames: 2}},
-	},
-	{
-		name: "Read: Don't allow reading more than a maximum amount of successful frames when CloseOnError == false",
-		testdata: []testdata{
-			{ct: ContentTypeYAML,
-				rawData: testYAML + yamlSep + testYAML + yamlSep + testYAML,
-				frames:  []string{testYAML, testYAML}},
-			{ct: ContentTypeJSON,
-				rawData: testJSON + testJSON + testJSON,
-				frames:  []string{testJSON, testJSON}},
-		},
-		readResults:           []error{nil, nil, ErrFrameCountOverflow, ErrFrameCountOverflow},
-		readOpts:              []ReaderOption{&ReaderWriterOptions{MaxFrames: 2, CloseOnError: pointer.BoolPtr(false)}},
-		expectReaderNotCloser: true,
 	},
 	{
 		name: "Read: Don't allow reading more than a maximum amount of successful frames, and 10x in total",
@@ -331,7 +278,7 @@ var defaultTestCases = []testcase{
 			{ct: ContentTypeYAML,
 				rawData: strings.Repeat("\n"+yamlSep, 10) + testYAML},
 		},
-		readResults: []error{ErrFrameCountOverflow, io.ErrClosedPipe},
+		readResults: []error{ErrFrameCountOverflow, ErrFrameCountOverflow},
 		readOpts:    []ReaderOption{&ReaderWriterOptions{MaxFrames: 1}},
 	},
 	{
@@ -340,7 +287,7 @@ var defaultTestCases = []testcase{
 			{ct: ContentTypeYAML,
 				rawData: strings.Repeat("\n"+yamlSep, 9) + testYAML + yamlSep + yamlSep, frames: []string{testYAML}},
 		},
-		readResults: []error{nil, ErrFrameCountOverflow, io.ErrClosedPipe},
+		readResults: []error{nil, ErrFrameCountOverflow, ErrFrameCountOverflow},
 		readOpts:    []ReaderOption{&ReaderWriterOptions{MaxFrames: 1}},
 	},
 	{
@@ -353,37 +300,19 @@ var defaultTestCases = []testcase{
 				rawData: testJSON + testJSON,
 				frames:  []string{testJSON, testJSON}},
 		},
-		readResults: []error{nil, nil, io.EOF, io.ErrClosedPipe},
+		readResults: []error{nil, nil, io.EOF, io.EOF},
 		readOpts:    []ReaderOption{&ReaderWriterOptions{MaxFrames: 2}},
 	},
 	// Other Content Types
 	{
-		name: "Roundtrip: Allow reading other content types when MaxFrames == 1",
+		name: "Roundtrip: Allow reading other content types when MaxFrames == 1, check overflows too",
 		testdata: []testdata{
 			{ct: otherCT, rawData: otherFrame, frames: []string{otherFrame}},
 		},
-		writeResults: []error{nil, ErrFrameCountOverflow, io.ErrClosedPipe, io.ErrClosedPipe},
-		readResults:  []error{nil, io.EOF, io.ErrClosedPipe, io.ErrClosedPipe},
+		writeResults: []error{nil, ErrFrameCountOverflow, ErrFrameCountOverflow, ErrFrameCountOverflow},
+		readResults:  []error{nil, io.EOF, io.EOF, io.EOF},
 		writeOpts:    []WriterOption{&ReaderWriterOptions{MaxFrames: 1}},
 		readOpts:     []ReaderOption{&ReaderWriterOptions{MaxFrames: 1}},
-	},
-	{
-		name: "Read: Always io.EOF after the first read when MaxFrames == 1",
-		testdata: []testdata{
-			{ct: otherCT, rawData: otherFrame, frames: []string{otherFrame}},
-		},
-		readResults:           []error{nil, io.EOF, io.EOF, io.EOF},
-		readOpts:              []ReaderOption{&ReaderWriterOptions{MaxFrames: 1, CloseOnError: pointer.BoolPtr(false)}},
-		expectReaderNotCloser: true,
-	},
-	{
-		name: "Read: Always io.EOF after the first read when MaxFrames == 1",
-		testdata: []testdata{
-			{ct: otherCT, rawData: otherFrame, frames: []string{otherFrame}},
-		},
-		readResults:           []error{nil, io.EOF, io.EOF, io.EOF},
-		readOpts:              []ReaderOption{&ReaderWriterOptions{MaxFrames: 1, CloseOnError: pointer.BoolPtr(false)}},
-		expectReaderNotCloser: true,
 	},
 	{
 		name: "Read: other content type frame size is exactly within bounds",
@@ -394,20 +323,20 @@ var defaultTestCases = []testcase{
 		readResults: []error{nil, io.EOF},
 	},
 	{
-		name: "Read: other content type frame is out of bounds",
+		name: "Read: other content type frame size overflow",
 		testdata: []testdata{
 			{ct: otherCT, rawData: otherFrame},
 		},
 		readOpts:    []ReaderOption{&ReaderWriterOptions{MaxFrameSize: otherFrameLen - 1, MaxFrames: 1}},
-		readResults: []error{ErrFrameSizeOverflow},
+		readResults: []error{ErrFrameSizeOverflow, io.EOF, io.EOF},
 	},
 	{
-		name: "Write: other content type frame overflow when CloseOnError == true",
+		name: "Write: other content type frame size overflow",
 		testdata: []testdata{
-			{ct: otherCT, frames: []string{otherFrame}},
+			{ct: otherCT, frames: []string{otherFrame, otherFrame}},
 		},
 		writeOpts:    []WriterOption{&ReaderWriterOptions{MaxFrameSize: otherFrameLen - 1, MaxFrames: 1}},
-		writeResults: []error{ErrFrameSizeOverflow, io.ErrClosedPipe, io.ErrClosedPipe},
+		writeResults: []error{ErrFrameSizeOverflow, ErrFrameSizeOverflow, nil},
 	},
 }
 
@@ -475,16 +404,11 @@ func (h *FactoryTester) testRoundtripCaseContentType(t *testing.T, c *testcase, 
 		}
 	}
 
+	assert.Equalf(t, 0, writeCloseCounter.count, "Writer should not be closed")
+
 	// Check that the written output was as expected, if writing is enabled
 	if len(c.writeResults) != 0 {
 		assert.Equalf(t, d.rawData, buf.String(), "Writer Output")
-
-		// Verify the writer has been closed the right amount of times, if enabled
-		if c.expectWriterNotClosed {
-			assert.Equalf(t, 0, writeCloseCounter.count, "Writer should be open")
-		} else {
-			assert.Equalf(t, 1, writeCloseCounter.count, "Writer should be closed")
-		}
 	} else {
 		// If writing was not tested, make sure the buffer contains the raw data for reading
 		buf = *bytes.NewBufferString(d.rawData)
@@ -505,19 +429,7 @@ func (h *FactoryTester) testRoundtripCaseContentType(t *testing.T, c *testcase, 
 			assert.ErrorIsf(t, r.Close(ctx), c.closeReaderErr, "Reader.Close err %d", i)
 		}
 	}
-	if len(c.readResults) != 0 {
-		// Verify the reader has been closed the right amount of times, if reading is enabled
-		if c.expectReaderNotCloser {
-			assert.Equalf(t, 0, readCloseCounter.count, "Reader should be open")
-		} else {
-			assert.Equalf(t, 1, readCloseCounter.count, "Reader should be closed")
-		}
-	}
-}
-
-type ioReadCloser struct {
-	io.Reader
-	io.Closer
+	assert.Equalf(t, 0, readCloseCounter.count, "Reader should not be closed")
 }
 
 type ioWriteCloser struct {

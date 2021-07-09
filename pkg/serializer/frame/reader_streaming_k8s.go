@@ -29,7 +29,6 @@ package frame
 import (
 	"fmt"
 	"io"
-	"math"
 
 	"k8s.io/apimachinery/pkg/runtime/serializer/streaming"
 )
@@ -41,21 +40,16 @@ type k8sStreamingReader interface {
 	io.Closer
 }
 
-const defaultBufSize = 1024
-
 // Ref: https://github.com/kubernetes/apimachinery/blob/v0.21.2/pkg/runtime/serializer/streaming/streaming.go#L63-L67
 func newK8sStreamingReader(rc io.ReadCloser, maxFrameSize int64) k8sStreamingReader {
 	if maxFrameSize == 0 {
 		maxFrameSize = DefaultMaxFrameSize
 	}
-	// CHANGE: Set the buffer size to the minimum between maxFrameSize and defaultBufSize, otherwise
-	// io.ErrShortBuffer won't ever be called and hence the streaming.ErrObjectTooLarge branch will
-	// never be hit.
-	bufSize := int(math.Min(float64(maxFrameSize), defaultBufSize))
 
 	return &k8sStreamingReaderImpl{
-		reader:   rc,
-		buf:      make([]byte, bufSize),
+		reader: rc,
+		buf:    make([]byte, 1024),
+		// CHANGE: maxBytes is configurable
 		maxBytes: maxFrameSize,
 	}
 }
@@ -85,9 +79,17 @@ func (d *k8sStreamingReaderImpl) Read() ([]byte, error) {
 			// NOTE: This might need changing upstream eventually, it only works when
 			// d.maxBytes/len(d.buf) is a multiple of 2
 			// CHANGE: In the original code no cast from int -> int64 was needed
-			if int64(len(d.buf)) < d.maxBytes {
+			bufLen := int64(len(d.buf))
+			if bufLen < d.maxBytes {
 				base += n
-				d.buf = append(d.buf, make([]byte, len(d.buf))...)
+				// CHANGE: Instead of unconditionally doubling the buffer, double the buffer
+				// length only to the extent it fits within d.maxBytes. Previously, it was a
+				// requirement that d.maxBytes was a multiple of 1024 for this logic to work.
+				newBytes := len(d.buf)
+				if d.maxBytes < 2*bufLen {
+					newBytes = int(d.maxBytes - bufLen)
+				}
+				d.buf = append(d.buf, make([]byte, newBytes)...)
 				continue
 			}
 			// must read the rest of the frame (until we stop getting ErrShortBuffer)

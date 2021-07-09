@@ -2,6 +2,7 @@ package frame
 
 import (
 	"context"
+	"sync"
 
 	"go.opentelemetry.io/otel/trace"
 )
@@ -11,8 +12,9 @@ import (
 func newHighlevelReader(r Reader, hasCloser bool, opts *ReaderOptions) Reader {
 	return &highlevelReader{
 		read:           r,
-		res:            newClosableResource(r, hasCloser, *opts.CloseOnError, &opts.Tracer),
+		readMu:         &sync.Mutex{},
 		opts:           opts,
+		hasCloser:      hasCloser,
 		maxTotalFrames: opts.MaxFrames * 10,
 	}
 }
@@ -22,21 +24,31 @@ func newHighlevelReader(r Reader, hasCloser bool, opts *ReaderOptions) Reader {
 // tracing context in ReadFrame.
 type highlevelReader struct {
 	read Reader
-	res  closableResource
-	opts *ReaderOptions
+	// readMu guards read.ReadFrame
+	readMu *sync.Mutex
+
+	//res       closableResource
+	opts      *ReaderOptions
+	hasCloser bool
+	// maxTotalFrames is set to opts.MaxFrames * 10
+	maxTotalFrames int64
 	// successfulFrameCount counts the amount of successful frames read
 	successfulFrameCount int64
-	totalFrameCount      int64
-	maxTotalFrames       int64
+	// totalFrameCount counts the total amount of frames read (including empty and failed ones)
+	totalFrameCount int64
 }
 
 func (r *highlevelReader) ReadFrame(ctx context.Context) ([]byte, error) {
+	// Make sure we have access to the underlying resource
+	r.readMu.Lock()
+	defer r.readMu.Unlock()
+
 	var frame []byte
-	err := r.res.accessResource(ctx, "ReadFrame", func(ctx context.Context, span trace.Span) error {
+	err := r.opts.Tracer.TraceFunc(ctx, "ReadFrame", func(ctx context.Context, span trace.Span) error {
 
 		// Refuse to write more than the maximum amount of successful frames
 		if r.successfulFrameCount > r.opts.MaxFrames {
-			return MakeErrFrameCountOverflowor(r.opts.MaxFrames)
+			return MakeFrameCountOverflowError(r.opts.MaxFrames)
 		}
 
 		// Call the underlying Reader. This MUST be done within r.res.accessResource in order to
@@ -50,7 +62,7 @@ func (r *highlevelReader) ReadFrame(ctx context.Context) ([]byte, error) {
 		// Record how large the frame is
 		spanAssociateFrameBytes(span, len(frame))
 		return nil
-	}, handleIoError)
+	}).RegisterCustom(handleIoError)
 	// handleIoError registers io.EOF as an "event", and other errors as "unknown errors" in the trace
 	if err != nil {
 		return nil, err
@@ -61,7 +73,7 @@ func (r *highlevelReader) ReadFrame(ctx context.Context) ([]byte, error) {
 func (r *highlevelReader) readFrame(ctx context.Context) ([]byte, error) {
 	// Ensure the total number of frames doesn't overflow
 	if r.totalFrameCount >= r.maxTotalFrames {
-		return nil, MakeErrFrameCountOverflowor(r.opts.MaxFrames)
+		return nil, MakeFrameCountOverflowError(r.opts.MaxFrames)
 	}
 	// Read the frame, and increase the total frame counter is increased
 	frame, err := r.read.ReadFrame(ctx)
@@ -85,10 +97,12 @@ func (r *highlevelReader) readFrame(ctx context.Context) ([]byte, error) {
 	r.successfulFrameCount += 1
 	// If the frame count now overflows, return a ErrFrameCountOverflowor
 	if r.successfulFrameCount > r.opts.MaxFrames {
-		return nil, MakeErrFrameCountOverflowor(r.opts.MaxFrames)
+		return nil, MakeFrameCountOverflowError(r.opts.MaxFrames)
 	}
 	return frame, nil
 }
 
-func (r *highlevelReader) ContentType() ContentType        { return r.read.ContentType() }
-func (r *highlevelReader) Close(ctx context.Context) error { return r.res.Close(ctx) }
+func (r *highlevelReader) ContentType() ContentType { return r.read.ContentType() }
+func (r *highlevelReader) Close(ctx context.Context) error {
+	return closeWithTrace(ctx, r.opts.Tracer, r.read, r.hasCloser).Register()
+}

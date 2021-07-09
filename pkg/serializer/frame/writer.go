@@ -2,37 +2,44 @@ package frame
 
 import (
 	"context"
+	"sync"
 
 	"go.opentelemetry.io/otel/trace"
 )
 
 func newHighlevelWriter(w Writer, hasCloser bool, opts *WriterOptions) Writer {
 	return &highlevelWriter{
-		writer: w,
-		res:    newClosableResource(w, hasCloser, *opts.CloseOnError, &opts.Tracer),
-		opts:   opts,
+		writer:    w,
+		writerMu:  &sync.Mutex{},
+		hasCloser: hasCloser,
+		opts:      opts,
 	}
 }
 
 type highlevelWriter struct {
-	writer Writer
-	res    closableResource
-	opts   *WriterOptions
+	writer   Writer
+	writerMu *sync.Mutex
+
+	hasCloser bool
+	opts      *WriterOptions
 	// frameCount counts the amount of successful frames written
 	frameCount int64
 }
 
 func (w *highlevelWriter) WriteFrame(ctx context.Context, frame []byte) error {
-	return w.res.accessResource(ctx, "WriteFrame", func(ctx context.Context, span trace.Span) error {
+	w.writerMu.Lock()
+	defer w.writerMu.Unlock()
+
+	return w.opts.Tracer.TraceFunc(ctx, "WriteFrame", func(ctx context.Context, span trace.Span) error {
 		// Note: w.writer must only be accessed within a w.res.accessResource closure to ensure thread-safety
 
 		// Refuse to write too large frames
 		if int64(len(frame)) > w.opts.MaxFrameSize {
-			return MakeErrFrameSizeOverflowor(w.opts.MaxFrameSize)
+			return MakeFrameSizeOverflowError(w.opts.MaxFrameSize)
 		}
 		// Refuse to write more than the maximum amount of frames
 		if w.frameCount >= w.opts.MaxFrames {
-			return MakeErrFrameCountOverflowor(w.opts.MaxFrames)
+			return MakeFrameCountOverflowError(w.opts.MaxFrames)
 		}
 
 		// Sanitize the frame
@@ -57,9 +64,11 @@ func (w *highlevelWriter) WriteFrame(ctx context.Context, frame []byte) error {
 			w.frameCount += 1
 		}
 		return err
-	}, handleIoError)
+	}).RegisterCustom(handleIoError)
 	// handleIoError registers io.EOF as an "event", and other errors as "unknown errors" in the trace
 }
 
-func (w *highlevelWriter) ContentType() ContentType        { return w.writer.ContentType() }
-func (w *highlevelWriter) Close(ctx context.Context) error { return w.res.Close(ctx) }
+func (w *highlevelWriter) ContentType() ContentType { return w.writer.ContentType() }
+func (w *highlevelWriter) Close(ctx context.Context) error {
+	return closeWithTrace(ctx, w.opts.Tracer, w.writer, w.hasCloser).Register()
+}

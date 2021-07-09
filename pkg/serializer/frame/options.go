@@ -18,7 +18,6 @@ func defaultReaderOpts() *ReaderOptions {
 		ReaderWriterOptions: ReaderWriterOptions{
 			MaxFrameSize: DefaultMaxFrameSize,
 			MaxFrames:    DefaultMaxFrames,
-			CloseOnError: pointer.BoolPtr(true),
 			Sanitizer:    DefaultSanitizer{},
 			Tracer: tracing.TracerOptions{
 				Name:      readerPrefix,
@@ -65,7 +64,6 @@ func defaultWriterOpts() *WriterOptions {
 		ReaderWriterOptions: ReaderWriterOptions{
 			MaxFrameSize: DefaultMaxFrameSize,
 			MaxFrames:    DefaultMaxFrames,
-			CloseOnError: pointer.BoolPtr(true),
 			Sanitizer:    DefaultSanitizer{},
 			Tracer: tracing.TracerOptions{
 				Name:      writerPrefix,
@@ -125,14 +123,6 @@ type ReaderWriterOptions struct {
 	// counted as a frame in this context. When reading, there can be a maximum of 10*MaxFrames
 	// in total (including failed and empty). Must be a positive integer. Defaults: DefaultMaxFrames.
 	MaxFrames int64
-	// CloseOnError specifies that Closer.Close(ctx) should be called when
-	// a critical part of the consumer of the resource (e.g. Reader.ReadFrame
-	// or Writer.WriteFrame) fails. This allows automatic cleanups and avoids
-	// unnecessary resource leaks.
-	//
-	// Although CloseOnError == true, os.Stdin, os.Stdout or os.Stderr files
-	// will never be closed automatically this way, although supplied.
-	CloseOnError *bool
 	// Sanitizer configures the sanitizer that should be used for sanitizing the frames.
 	Sanitizer Sanitizer
 	// TracerOptions is embedded for reporting trace spans upstream
@@ -149,9 +139,6 @@ func (o *ReaderWriterOptions) applyCommon(target *ReaderWriterOptions) {
 	}
 	if o.MaxFrames != 0 {
 		target.MaxFrames = o.MaxFrames
-	}
-	if o.CloseOnError != nil {
-		target.CloseOnError = o.CloseOnError
 	}
 	o.Tracer.ApplyToTracer(&target.Tracer)
 }

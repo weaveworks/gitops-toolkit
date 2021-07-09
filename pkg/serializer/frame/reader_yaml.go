@@ -57,7 +57,7 @@ func (r *yamlReader) ReadFrame(context.Context) ([]byte, error) {
 	// Enforce this "final" frame size <= maxFrameSize, as the limit on the IoLimitedReader was a bit less
 	// restrictive (also allowed reading the YAML document separator).
 	if int64(len(frame)) > r.maxFrameSize {
-		return nil, MakeErrFrameSizeOverflowor(r.maxFrameSize)
+		return nil, MakeFrameSizeOverflowError(r.maxFrameSize)
 	}
 
 	return frame, nil

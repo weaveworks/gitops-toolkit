@@ -7,7 +7,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/weaveworks/libgitops/pkg/tracing"
 	"go.opentelemetry.io/otel"
-	"k8s.io/utils/pointer"
 )
 
 func compareOptions(t *testing.T, name string, got, want interface{}) {
@@ -109,54 +108,14 @@ func TestApplyReaderWriterOptions(t *testing.T) {
 			wantWriter:  defaultWriterOpts(),
 		},
 		{
-			name:       "CloseOnError: apply",
-			opts:       []ReaderWriterOption{&ReaderWriterOptions{CloseOnError: pointer.BoolPtr(true)}},
-			wantReader: &ReaderOptions{ReaderWriterOptions: ReaderWriterOptions{CloseOnError: pointer.BoolPtr(true)}},
-			wantWriter: &WriterOptions{ReaderWriterOptions: ReaderWriterOptions{CloseOnError: pointer.BoolPtr(true)}},
-		},
-		{
-			name:        "CloseOnError: override default",
-			opts:        []ReaderWriterOption{&ReaderWriterOptions{CloseOnError: pointer.BoolPtr(false)}},
-			fromDefault: true,
-			wantReader: defReadWithMutation(func(ro *ReaderOptions) {
-				ro.CloseOnError = pointer.BoolPtr(false)
-			}),
-			wantWriter: defWriteWithMutation(func(wo *WriterOptions) {
-				wo.CloseOnError = pointer.BoolPtr(false)
-			}),
-		},
-		{
-			name:        "CloseOnError: zero value has no effect",
-			opts:        []ReaderWriterOption{&ReaderWriterOptions{CloseOnError: nil}},
-			fromDefault: true,
-			wantReader:  defaultReaderOpts(),
-			wantWriter:  defaultWriterOpts(),
-		},
-		{
-			name: "CloseOnError: latter overrides earlier, if set",
-			opts: []ReaderWriterOption{
-				&ReaderWriterOptions{CloseOnError: pointer.BoolPtr(true)},
-				&ReaderWriterOptions{CloseOnError: pointer.BoolPtr(false)},
-				&ReaderWriterOptions{CloseOnError: nil},
-			},
-			wantReader: &ReaderOptions{ReaderWriterOptions: ReaderWriterOptions{CloseOnError: pointer.BoolPtr(false)}},
-			wantWriter: &WriterOptions{ReaderWriterOptions: ReaderWriterOptions{CloseOnError: pointer.BoolPtr(false)}},
-		},
-		{
 			name:        "WithTracerOptions: Set Tracer.Name",
 			fromDefault: true,
 			opts:        []ReaderWriterOption{WithTracerOptions(tracing.TracerOptions{Name: "foo"})},
 			wantReader: defReadWithMutation(func(ro *ReaderOptions) {
 				ro.Tracer.Name = "foo"
-				// Tracer.Name implicitely also configures a tracer with the given name, that otherwise
-				// would need to be constructed like this
-				//tracing.WithTracer(otel.GetTracerProvider().Tracer("foo")).ApplyToTracer(&ro.Tracer)
 			}),
 			wantWriter: defWriteWithMutation(func(wo *WriterOptions) {
 				wo.Tracer.Name = "foo"
-				// Tracer.Name implicitely also configures a tracer with the given name, that otherwise
-				// would need to be constructed like this
-				//tracing.WithTracer(otel.GetTracerProvider().Tracer("foo")).ApplyToTracer(&wo.TracerOptions)
 			}),
 		},
 		{

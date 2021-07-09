@@ -3,7 +3,7 @@ package frame
 import (
 	"bytes"
 	"context"
-	"io"
+	"io/fs"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -75,10 +75,16 @@ func TestFromConstructors(t *testing.T) {
 	// FromFile -- found
 	got, err := NewYAMLReader(FromFile(yamlPath)).ReadFrame(ctx)
 	assert.Nil(t, err)
-	assert.Equal(t, content, got)
+	assert.Equal(t, str, string(got))
+	// FromFile -- already closed
+	f := FromFile(yamlPath)
+	f.Close() // deliberately close the file before giving it to the reader
+	got, err = NewYAMLReader(f).ReadFrame(ctx)
+	assert.ErrorIs(t, err, fs.ErrClosed)
+	assert.Empty(t, got)
 	// FromFile -- not found
 	got, err = NewYAMLReader(FromFile(filepath.Join(t.TempDir(), "notexist.yaml"))).ReadFrame(ctx)
-	assert.NotNil(t, err)
+	assert.ErrorIs(t, err, fs.ErrNotExist)
 	assert.Empty(t, got)
 	// FromBytes
 	got, err = NewYAMLReader(FromBytes(content)).ReadFrame(ctx)
@@ -93,23 +99,24 @@ func TestFromConstructors(t *testing.T) {
 func TestToIoWriteCloser(t *testing.T) {
 	var buf bytes.Buffer
 	closeRec := &recordingCloser{}
-	w := NewYAMLWriter(ioWriteCloser{&buf, closeRec})
+	w := NewYAMLWriter(ioWriteCloser{&buf, closeRec}, &ReaderWriterOptions{MaxFrameSize: testYAMLlen})
 	ctx := context.Background()
 	iow := ToIoWriteCloser(ctx, w)
 
-	content := []byte("foo: bar\n")
+	content := []byte(testYAML)
 	n, err := iow.Write(content)
 	assert.Len(t, content, n)
 	assert.Nil(t, err)
 
-	// Close the writer to provoke an error below
+	// Check closing forwarding
 	assert.Nil(t, iow.Close())
 	assert.Equal(t, 1, closeRec.count)
 
 	// Try writing again
-	n, err = iow.Write(content)
-	assert.Equal(t, n, 0)
-	assert.ErrorIs(t, err, io.ErrClosedPipe)
+	overflowContent := []byte(testYAML + testYAML)
+	n, err = iow.Write(overflowContent)
+	assert.Equal(t, 0, n)
+	assert.ErrorIs(t, err, ErrFrameSizeOverflow)
 	// Assume the writer has been closed only once
 	assert.Equal(t, 1, closeRec.count)
 	assert.Equal(t, buf.String(), yamlSep+string(content))

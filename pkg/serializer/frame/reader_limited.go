@@ -13,21 +13,21 @@ const DefaultMaxFrameSize = 16 * 1024 * 1024
 var (
 	// ErrFrameSizeOverflow is returned from Reader.ReadFrame or Writer.WriteFrame when a
 	// frame exceeds the maximum allowed size.
-	ErrFrameSizeOverflow = errors.New("read frame was larger than maximum allowed size")
+	ErrFrameSizeOverflow = errors.New("frame was larger than maximum allowed size")
 	// ErrFrameCountOverflow is returned when a Reader or Writer have processed too many
 	// frames.
 	ErrFrameCountOverflow = errors.New("the maximum amount of frames have been processed")
 )
 
-// MakeErrFrameSizeOverflowor returns a wrapped ErrFrameSizeOverflow along with
+// MakeFrameSizeOverflowError returns a wrapped ErrFrameSizeOverflow along with
 // context in a normalized way.
-func MakeErrFrameSizeOverflowor(maxFrameSize int64) error {
+func MakeFrameSizeOverflowError(maxFrameSize int64) error {
 	return fmt.Errorf("%w %d bytes", ErrFrameSizeOverflow, maxFrameSize)
 }
 
-// MakeErrFrameCountOverflowor returns a wrapped ErrFrameCountOverflow along with
+// MakeFrameCountOverflowError returns a wrapped ErrFrameCountOverflow along with
 // context in a normalized way.
-func MakeErrFrameCountOverflowor(maxFrames int64) error {
+func MakeFrameCountOverflowError(maxFrames int64) error {
 	return fmt.Errorf("%w: %d", ErrFrameCountOverflow, maxFrames)
 }
 
@@ -80,7 +80,7 @@ func (l *ioLimitedReader) Read(b []byte) (int, error) {
 	// If we've already read more than we're allowed to, return an overflow error
 	if l.frameBytes > l.maxFrameSize {
 		// Keep returning this error as long as relevant
-		return 0, MakeErrFrameSizeOverflowor(l.maxFrameSize)
+		return 0, MakeFrameSizeOverflowError(l.maxFrameSize)
 
 	} else if l.frameBytes == l.maxFrameSize {
 		// At this point we're not sure if the frame actually stops here or not
@@ -95,14 +95,14 @@ func (l *ioLimitedReader) Read(b []byte) (int, error) {
 
 		// Return the error from the read, if any. The most common error here is io.EOF.
 		if err != nil {
-			return 0, err
+			return tmpn, err
 		}
 		// Safeguard against a faulty reader. It's invalid to return tmpn == 0 and err == nil.
 		if tmpn == 0 {
 			return 0, io.ErrNoProgress
 		}
 		// Return that the frame overflowed now, as were able to read the byte (tmpn must be 1)
-		return 0, MakeErrFrameSizeOverflowor(l.maxFrameSize)
+		return 0, MakeFrameSizeOverflowError(l.maxFrameSize)
 	} // else l.frameBytes < l.maxFrameSize
 
 	// We can at maximum read bytesLeft bytes more, shrink b accordingly if b is larger than the

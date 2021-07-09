@@ -1,6 +1,7 @@
 package frame
 
 import (
+	"context"
 	"errors"
 	"io"
 
@@ -18,6 +19,22 @@ const (
 
 func spanAssociateFrameBytes(span trace.Span, len int) {
 	span.SetAttributes(attribute.Int("frame_bytes", len))
+}
+
+func closeWithTrace(ctx context.Context, fnTracer tracing.FuncTracer, c Closer, hasCloser bool) tracing.TraceFuncResult {
+	spanName := "Close"
+	// Mark clearly that if hasCloser == false, no closing operation was performed
+	if !hasCloser {
+		spanName = "CloseNoop"
+	}
+	return fnTracer.TraceFunc(ctx, spanName, func(ctx context.Context, _ trace.Span) error {
+		// Don't close if a closer wasn't given
+		if !hasCloser {
+			return nil
+		}
+		// Close the underlying resource
+		return c.Close(ctx)
+	})
 }
 
 // handleIoError registers io.EOF as an "event", and other errors as "unknown errors" in the trace
