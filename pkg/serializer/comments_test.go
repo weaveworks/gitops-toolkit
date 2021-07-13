@@ -18,8 +18,8 @@ kind: Test
 spec:
   # Head comment
   data:
-  - field # Inline comment
-  - another
+    - field # Inline comment
+    - another
   thing:
     # Head comment
     var: true
@@ -29,15 +29,15 @@ const sampleData2 = `kind: Test
 spec:
   # Head comment
   data:
-  - field # Inline comment
-  - another:
-      subthing: "yes"
+    - field # Inline comment
+    - another:
+        subthing: "yes"
   thing:
     # Head comment
     var: true
 status:
   nested:
-    fields:
+    fields: {}
     # Just a comment
 `
 

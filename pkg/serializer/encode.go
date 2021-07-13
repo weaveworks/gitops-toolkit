@@ -1,7 +1,10 @@
 package serializer
 
 import (
+	"context"
+
 	"github.com/sirupsen/logrus"
+	"github.com/weaveworks/libgitops/pkg/serializer/frame"
 	"github.com/weaveworks/libgitops/pkg/util"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -12,7 +15,7 @@ type EncodingOptions struct {
 	// TODO: Fix that sometimes omitempty fields aren't respected
 	Pretty *bool
 	// Whether to preserve YAML comments internally. This only works for objects embedding metav1.ObjectMeta.
-	// Only applicable to ContentTypeYAML framers.
+	// Only applicable to frame.FramingTypeYAML framers.
 	// Using any other framer will be silently ignored. Usage of this option also requires setting
 	// the PreserveComments in DecodingOptions, too. (Default: false)
 	// TODO: Make this a BestEffort & Strict mode
@@ -70,12 +73,12 @@ func newEncoder(schemeAndCodec *schemeAndCodec, opts EncodingOptions) Encoder {
 	}
 }
 
-// Encode encodes the given objects and writes them to the specified FrameWriter.
-// The FrameWriter specifies the ContentType. This encoder will automatically convert any
+// Encode encodes the given objects and writes them to the specified frame.Writer.
+// The frame.Writer specifies the frame.FramingType. This encoder will automatically convert any
 // internal object given to the preferred external groupversion. No conversion will happen
 // if the given object is of an external version.
 // TODO: This should automatically convert to the preferred version
-func (e *encoder) Encode(fw FrameWriter, objs ...runtime.Object) error {
+func (e *encoder) Encode(fw frame.Writer, objs ...runtime.Object) error {
 	for _, obj := range objs {
 		// Get the kind for the given object
 		gvk, err := GVKForObject(e.scheme, obj)
@@ -102,12 +105,12 @@ func (e *encoder) Encode(fw FrameWriter, objs ...runtime.Object) error {
 
 // EncodeForGroupVersion encodes the given object for the specific groupversion. If the object
 // is not of that version currently it will try to convert. The output bytes are written to the
-// FrameWriter. The FrameWriter specifies the ContentType.
-func (e *encoder) EncodeForGroupVersion(fw FrameWriter, obj runtime.Object, gv schema.GroupVersion) error {
+// frame.Writer. The frame.Writer specifies the frame.FramingType.
+func (e *encoder) EncodeForGroupVersion(fw frame.Writer, obj runtime.Object, gv schema.GroupVersion) error {
 	// Get the serializer for the media type
-	serializerInfo, ok := runtime.SerializerInfoForMediaType(e.codecs.SupportedMediaTypes(), string(fw.ContentType()))
+	serializerInfo, ok := runtime.SerializerInfoForMediaType(e.codecs.SupportedMediaTypes(), string(fw.FramingType()))
 	if !ok {
-		return ErrUnsupportedContentType
+		return frame.MakeUnsupportedFramingTypeError(fw.FramingType())
 	}
 
 	// Choose the pretty or non-pretty one
@@ -120,7 +123,7 @@ func (e *encoder) EncodeForGroupVersion(fw FrameWriter, obj runtime.Object, gv s
 		if serializerInfo.PrettySerializer != nil {
 			encoder = serializerInfo.PrettySerializer
 		} else {
-			logrus.Debugf("PrettySerializer for ContentType %s is nil, falling back to Serializer.", fw.ContentType())
+			logrus.Debugf("PrettySerializer for frame.FramingType %s is nil, falling back to Serializer.", fw.FramingType())
 		}
 	}
 
@@ -131,7 +134,8 @@ func (e *encoder) EncodeForGroupVersion(fw FrameWriter, obj runtime.Object, gv s
 	metaobj, ok := toMetaObject(obj)
 	// For objects without ObjectMeta, the cast will fail. Allow that failure and do "normal" encoding
 	if !ok {
-		return versionEncoder.Encode(obj, fw)
+		ctx := context.TODO()
+		return versionEncoder.Encode(obj, frame.ToIoWriteCloser(ctx, fw))
 	}
 
 	// Specialize the encoder for a specific gv and encode the object

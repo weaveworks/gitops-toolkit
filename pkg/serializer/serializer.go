@@ -1,47 +1,25 @@
 package serializer
 
 import (
-	"errors"
 	"fmt"
 
+	"github.com/weaveworks/libgitops/pkg/serializer/frame"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8sserializer "k8s.io/apimachinery/pkg/runtime/serializer"
 )
 
-// ContentType specifies a content type for Encoders, Decoders, FrameWriters and FrameReaders
-type ContentType string
-
-const (
-	// ContentTypeJSON specifies usage of JSON as the content type.
-	// It is an alias for k8s.io/apimachinery/pkg/runtime.ContentTypeJSON
-	ContentTypeJSON = ContentType(runtime.ContentTypeJSON)
-
-	// ContentTypeYAML specifies usage of YAML as the content type.
-	// It is an alias for k8s.io/apimachinery/pkg/runtime.ContentTypeYAML
-	ContentTypeYAML = ContentType(runtime.ContentTypeYAML)
-)
-
-// ErrUnsupportedContentType is returned if the specified content type isn't supported
-var ErrUnsupportedContentType = errors.New("unsupported content type")
-
-// ContentTyped is an interface for objects that are specific to a set ContentType.
-type ContentTyped interface {
-	// ContentType returns the ContentType (usually ContentTypeYAML or ContentTypeJSON) for the given object.
-	ContentType() ContentType
-}
-
 // Serializer is an interface providing high-level decoding/encoding functionality
 // for types registered in a *runtime.Scheme
 type Serializer interface {
 	// Decoder is a high-level interface for decoding Kubernetes API Machinery objects read from
-	// a FrameWriter. The decoder can be customized by passing some options (e.g. WithDecodingOptions)
+	// a frame.Writer. The decoder can be customized by passing some options (e.g. WithDecodingOptions)
 	// to this call.
 	// The decoder supports both "classic" API Machinery objects and controller-runtime CRDs
 	Decoder(optsFn ...DecodingOptionsFunc) Decoder
 
 	// Encoder is a high-level interface for encoding Kubernetes API Machinery objects and writing them
-	// to a FrameWriter. The encoder can be customized by passing some options (e.g. WithEncodingOptions)
+	// to a frame.Writer. The encoder can be customized by passing some options (e.g. WithEncodingOptions)
 	// to this call.
 	// The encoder supports both "classic" API Machinery objects and controller-runtime CRDs
 	Encoder(optsFn ...EncodingOptionsFunc) Encoder
@@ -68,25 +46,25 @@ type schemeAndCodec struct {
 }
 
 // Encoder is a high-level interface for encoding Kubernetes API Machinery objects and writing them
-// to a FrameWriter.
+// to a frame.Writer.
 type Encoder interface {
-	// Encode encodes the given objects and writes them to the specified FrameWriter.
-	// The FrameWriter specifies the ContentType. This encoder will automatically convert any
+	// Encode encodes the given objects and writes them to the specified frame.Writer.
+	// The frame.Writer specifies the frame.FramingType. This encoder will automatically convert any
 	// internal object given to the preferred external groupversion. No conversion will happen
 	// if the given object is of an external version.
-	Encode(fw FrameWriter, obj ...runtime.Object) error
+	Encode(fw frame.Writer, obj ...runtime.Object) error
 
 	// EncodeForGroupVersion encodes the given object for the specific groupversion. If the object
 	// is not of that version currently it will try to convert. The output bytes are written to the
-	// FrameWriter. The FrameWriter specifies the ContentType.
-	EncodeForGroupVersion(fw FrameWriter, obj runtime.Object, gv schema.GroupVersion) error
+	// frame.Writer. The frame.Writer specifies the frame.FramingType.
+	EncodeForGroupVersion(fw frame.Writer, obj runtime.Object, gv schema.GroupVersion) error
 }
 
 // Decoder is a high-level interface for decoding Kubernetes API Machinery objects read from
-// a FrameWriter. The decoder can be customized by passing some options (e.g. WithDecodingOptions)
+// a frame.Writer. The decoder can be customized by passing some options (e.g. WithDecodingOptions)
 // to this call.
 type Decoder interface {
-	// Decode returns the decoded object from the next document in the FrameReader stream.
+	// Decode returns the decoded object from the next document in the frame.Reader stream.
 	// If there are multiple documents in the underlying stream, this call will read one
 	// 	document and return it. Decode might be invoked for getting new documents until it
 	// 	returns io.EOF. When io.EOF is reached in a call, the stream is automatically closed.
@@ -101,9 +79,9 @@ type Decoder interface {
 	// If opts.DecodeUnknown is true, any type with an unrecognized apiVersion/kind will be returned as a
 	// 	*runtime.Unknown object instead of returning a UnrecognizedTypeError.
 	// opts.DecodeListElements is not applicable in this call.
-	Decode(fr FrameReader) (runtime.Object, error)
+	Decode(fr frame.Reader) (runtime.Object, error)
 
-	// DecodeInto decodes the next document in the FrameReader stream into obj if the types are matching.
+	// DecodeInto decodes the next document in the frame.Reader stream into obj if the types are matching.
 	// If there are multiple documents in the underlying stream, this call will read one
 	// 	document and return it. Decode might be invoked for getting new documents until it
 	// 	returns io.EOF. When io.EOF is reached in a call, the stream is automatically closed.
@@ -120,9 +98,9 @@ type Decoder interface {
 	// opts.DecodeUnknown is not applicable in this call. In case you want to decode an object into a
 	// 	*runtime.Unknown, just create a runtime.Unknown object and pass the pointer as obj into DecodeInto
 	// 	and it'll work.
-	DecodeInto(fr FrameReader, obj runtime.Object) error
+	DecodeInto(fr frame.Reader, obj runtime.Object) error
 
-	// DecodeAll returns the decoded objects from all documents in the FrameReader stream. The underlying
+	// DecodeAll returns the decoded objects from all documents in the frame.Reader stream. The underlying
 	// stream is automatically closed on io.EOF. io.EOF is never returned from this function.
 	// If any decoded object is for an unrecognized group, or version, UnrecognizedGroupError
 	// 	or UnrecognizedVersionError might be returned.
@@ -137,7 +115,7 @@ type Decoder interface {
 	// 	added into the returning slice. The v1.List will in this case not be returned.
 	// If opts.DecodeUnknown is true, any type with an unrecognized apiVersion/kind will be returned as a
 	// 	*runtime.Unknown object instead of returning a UnrecognizedTypeError.
-	DecodeAll(fr FrameReader) ([]runtime.Object, error)
+	DecodeAll(fr frame.Reader) ([]runtime.Object, error)
 }
 
 // Converter is an interface that allows access to object conversion capabilities

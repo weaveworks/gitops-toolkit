@@ -8,7 +8,7 @@ import (
 	"sync"
 
 	log "github.com/sirupsen/logrus"
-	"github.com/weaveworks/libgitops/pkg/serializer"
+	"github.com/weaveworks/libgitops/pkg/serializer/frame"
 	"github.com/weaveworks/libgitops/pkg/util"
 )
 
@@ -133,7 +133,7 @@ func (r *GenericMappedRawStorage) Checksum(key ObjectKey) (string, error) {
 	return checksumFromModTime(path)
 }
 
-func (r *GenericMappedRawStorage) ContentType(key ObjectKey) (ct serializer.ContentType) {
+func (r *GenericMappedRawStorage) ContentType(key ObjectKey) (ct frame.FramingType) {
 	if file, err := r.realPath(key); err == nil {
 		ct = ContentTypes[filepath.Ext(file)] // Retrieve the correct format based on the extension
 	}

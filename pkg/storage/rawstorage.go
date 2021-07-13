@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/weaveworks/libgitops/pkg/runtime"
-	"github.com/weaveworks/libgitops/pkg/serializer"
+	"github.com/weaveworks/libgitops/pkg/serializer/frame"
 	"github.com/weaveworks/libgitops/pkg/util"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -36,7 +36,7 @@ type RawStorage interface {
 	// If the resource does not exist, it returns ErrNotFound.
 	Checksum(key ObjectKey) (string, error)
 	// ContentType returns the content type of the contents of the resource indicated by key.
-	ContentType(key ObjectKey) serializer.ContentType
+	ContentType(key ObjectKey) frame.FramingType
 
 	// WatchDir returns the path for Watchers to watch changes in.
 	WatchDir() string
@@ -45,7 +45,7 @@ type RawStorage interface {
 	GetKey(path string) (ObjectKey, error)
 }
 
-func NewGenericRawStorage(dir string, gv schema.GroupVersion, ct serializer.ContentType) RawStorage {
+func NewGenericRawStorage(dir string, gv schema.GroupVersion, ct frame.FramingType) RawStorage {
 	ext := extForContentType(ct)
 	if ext == "" {
 		panic("Invalid content type")
@@ -65,7 +65,7 @@ func NewGenericRawStorage(dir string, gv schema.GroupVersion, ct serializer.Cont
 type GenericRawStorage struct {
 	dir string
 	gv  schema.GroupVersion
-	ct  serializer.ContentType
+	ct  frame.FramingType
 	ext string
 }
 
@@ -175,7 +175,7 @@ func (r *GenericRawStorage) Checksum(key ObjectKey) (string, error) {
 	return checksumFromModTime(r.keyPath(key))
 }
 
-func (r *GenericRawStorage) ContentType(_ ObjectKey) serializer.ContentType {
+func (r *GenericRawStorage) ContentType(_ ObjectKey) frame.FramingType {
 	return r.ct
 }
 

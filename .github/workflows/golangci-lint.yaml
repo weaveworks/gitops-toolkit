@@ -1,18 +1,21 @@
 # https://github.com/marketplace/actions/run-golangci-lint
 name: golangci-lint
-
 on:
-  pull_request:
   push:
-    branches: [master]
-
+    tags:
+      - v*
+    branches:
+      - master
+      - main
+  pull_request:
 jobs:
   golangci:
-    name: Linter
+    name: lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v1
+        uses: golangci/golangci-lint-action@v2
         with:
-          version: v1.28
+          # Optional: version of golangci-lint to use in form of v1.2 or v1.2.3 or `latest` to use the latest version
+          version: v1.29

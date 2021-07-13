@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/weaveworks/libgitops/pkg/serializer/frame"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/conversion"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -30,9 +31,10 @@ var (
 	ext1gv    = schema.GroupVersion{Group: groupname, Version: "v1alpha1"}
 	ext2gv    = schema.GroupVersion{Group: groupname, Version: "v1alpha2"}
 
-	intsb  = runtime.NewSchemeBuilder(addInternalTypes)
-	ext1sb = runtime.NewSchemeBuilder(registerConversions, addExternalTypes(ext1gv), v1_addDefaultingFuncs, registerOldCRD)
-	ext2sb = runtime.NewSchemeBuilder(registerConversions, addExternalTypes(ext2gv), v2_addDefaultingFuncs, registerNewCRD)
+	intsb   = runtime.NewSchemeBuilder(addInternalTypes)
+	ext1sb  = runtime.NewSchemeBuilder(registerConversions, addExternalTypes(ext1gv), v1_addDefaultingFuncs, registerOldCRD)
+	ext2sb  = runtime.NewSchemeBuilder(registerConversions, addExternalTypes(ext2gv), v2_addDefaultingFuncs, registerNewCRD)
+	yamlSep = []byte("---\n")
 )
 
 func v1_addDefaultingFuncs(scheme *runtime.Scheme) error {
@@ -251,59 +253,65 @@ var (
 	newCRDMeta  = metav1.TypeMeta{APIVersion: "foogroup/v1alpha2", Kind: "CRD"}
 	unknownMeta = runtime.TypeMeta{APIVersion: "unknown/v1", Kind: "YouDontRecognizeMe"}
 
-	oneSimple = []byte(`apiVersion: foogroup/v1alpha1
+	oneSimple = []byte(`---
+apiVersion: foogroup/v1alpha1
 kind: Simple
 testString: foo
 `)
-	simpleUnknownField = []byte(`apiVersion: foogroup/v1alpha1
+	simpleUnknownField = []byte(`---
+apiVersion: foogroup/v1alpha1
 kind: Simple
 testString: foo
 unknownField: bar
 `)
-	simpleDuplicateField = []byte(`apiVersion: foogroup/v1alpha1
+	simpleDuplicateField = []byte(`---
+apiVersion: foogroup/v1alpha1
 kind: Simple
 testString: foo
 testString: bar
 `)
-	unrecognizedVersion = []byte(`apiVersion: foogroup/v1alpha0
+	unrecognizedVersion = []byte(`---
+apiVersion: foogroup/v1alpha0
 kind: Simple
 testString: foo
 `)
-	unrecognizedGVK = []byte(`apiVersion: unknown/v1
+	unrecognizedGVK = []byte(`---
+apiVersion: unknown/v1
 kind: YouDontRecognizeMe
 testFooBar: true
 `)
-	oneComplex = []byte(`Int64: 0
+	oneComplex = []byte(`---
+Int64: 0
 apiVersion: foogroup/v1alpha1
 bool: false
 int: 0
 kind: Complex
 string: bar
 `)
-	simpleAndComplex = []byte(string(oneSimple) + "---\n" + string(oneComplex))
+	simpleAndComplex = []byte(string(oneSimple) + string(oneComplex))
 
-	testList = []byte(`apiVersion: v1
+	testList = []byte(`---
+apiVersion: v1
 kind: List
 items:
-- apiVersion: foogroup/v1alpha1
-  kind: Simple # Test comment
-  # Test comment
-  testString: foo
-- apiVersion: foogroup/v1alpha1
-  # Test 2 comment
-  kind: Complex
-  int: 5 # Test 2 comment
-- apiVersion: foogroup/v1alpha1
-  kind: Simple # Test 3 comment
-  testString: bar
+  - apiVersion: foogroup/v1alpha1
+    kind: Simple # Test comment
+    # Test comment
+    testString: foo
+  - apiVersion: foogroup/v1alpha1
+    # Test 2 comment
+    kind: Complex
+    int: 5 # Test 2 comment
+  - apiVersion: foogroup/v1alpha1
+    kind: Simple # Test 3 comment
+    testString: bar
 `)
 
-	simpleJSON = []byte(`{"apiVersion":"foogroup/v1alpha1","kind":"Simple","testString":"foo"}
-`)
-	complexJSON = []byte(`{"apiVersion":"foogroup/v1alpha1","kind":"Complex","string":"bar","int":0,"Int64":0,"bool":false}
-`)
+	simpleJSON  = []byte(`{"apiVersion":"foogroup/v1alpha1","kind":"Simple","testString":"foo"}`)
+	complexJSON = []byte(`{"apiVersion":"foogroup/v1alpha1","kind":"Complex","string":"bar","int":0,"Int64":0,"bool":false}`)
 
-	oldCRD = []byte(`# I'm a top comment
+	oldCRD = []byte(`---
+# I'm a top comment
 apiVersion: foogroup/v1alpha1
 kind: CRD
 metadata:
@@ -312,14 +320,16 @@ metadata:
 testString: foobar # Me too
 `)
 
-	oldCRDNoComments = []byte(`apiVersion: foogroup/v1alpha1
+	oldCRDNoComments = []byte(`---
+apiVersion: foogroup/v1alpha1
 kind: CRD
 metadata:
   creationTimestamp: null
 testString: foobar
 `)
 
-	newCRD = []byte(`# I'm a top comment
+	newCRD = []byte(`---
+# I'm a top comment
 apiVersion: foogroup/v1alpha2
 kind: CRD
 metadata:
@@ -328,7 +338,8 @@ metadata:
 otherString: foobar # Me too
 `)
 
-	newCRDNoComments = []byte(`apiVersion: foogroup/v1alpha2
+	newCRDNoComments = []byte(`---
+apiVersion: foogroup/v1alpha2
 kind: CRD
 metadata:
   creationTimestamp: null
@@ -343,18 +354,18 @@ func TestEncode(t *testing.T) {
 	newCRDObj := &CRDNewVersion{OtherString: "foobar"}
 	tests := []struct {
 		name        string
-		ct          ContentType
+		ct          frame.FramingType
 		objs        []runtime.Object
 		expected    []byte
 		expectedErr bool
 	}{
-		{"simple yaml", ContentTypeYAML, []runtime.Object{simpleObj}, oneSimple, false},
-		{"complex yaml", ContentTypeYAML, []runtime.Object{complexObj}, oneComplex, false},
-		{"both simple and complex yaml", ContentTypeYAML, []runtime.Object{simpleObj, complexObj}, simpleAndComplex, false},
-		{"simple json", ContentTypeJSON, []runtime.Object{simpleObj}, simpleJSON, false},
-		{"complex json", ContentTypeJSON, []runtime.Object{complexObj}, complexJSON, false},
-		{"old CRD yaml", ContentTypeYAML, []runtime.Object{oldCRDObj}, oldCRDNoComments, false},
-		{"new CRD yaml", ContentTypeYAML, []runtime.Object{newCRDObj}, newCRDNoComments, false},
+		{"simple yaml", frame.FramingTypeYAML, []runtime.Object{simpleObj}, oneSimple, false},
+		{"complex yaml", frame.FramingTypeYAML, []runtime.Object{complexObj}, oneComplex, false},
+		{"both simple and complex yaml", frame.FramingTypeYAML, []runtime.Object{simpleObj, complexObj}, simpleAndComplex, false},
+		{"simple json", frame.FramingTypeJSON, []runtime.Object{simpleObj}, simpleJSON, false},
+		{"complex json", frame.FramingTypeJSON, []runtime.Object{complexObj}, complexJSON, false},
+		{"old CRD yaml", frame.FramingTypeYAML, []runtime.Object{oldCRDObj}, oldCRDNoComments, false},
+		{"new CRD yaml", frame.FramingTypeYAML, []runtime.Object{newCRDObj}, newCRDNoComments, false},
 		//{"no-conversion simple", defaultEncoder, &runtimetest.ExternalSimple{TestString: "foo"}, simpleJSON, false},
 		//{"support internal", defaultEncoder, []runtime.Object{simpleObj}, []byte(`{"testString":"foo"}` + "\n"), false},
 	}
@@ -362,7 +373,7 @@ func TestEncode(t *testing.T) {
 	for _, rt := range tests {
 		t.Run(rt.name, func(t2 *testing.T) {
 			buf := new(bytes.Buffer)
-			actualErr := defaultEncoder.Encode(NewFrameWriter(rt.ct, buf), rt.objs...)
+			actualErr := defaultEncoder.Encode(frame.NewWriter(rt.ct, buf), rt.objs...)
 			actual := buf.Bytes()
 			if (actualErr != nil) != rt.expectedErr {
 				t2.Errorf("expected error %t but actual %t: %v", rt.expectedErr, actualErr != nil, actualErr)
@@ -404,7 +415,7 @@ func TestDecode(t *testing.T) {
 			obj, actual := ourserializer.Decoder(
 				WithDefaultsDecode(rt.doDefaulting),
 				WithConvertToHubDecode(rt.doConversion),
-			).Decode(NewYAMLFrameReader(FromBytes(rt.data)))
+			).Decode(frame.NewYAMLReader(frame.FromBytes(rt.data)))
 			if (actual != nil) != rt.expectedErr {
 				t2.Errorf("expected error %t but actual %t: %v", rt.expectedErr, actual != nil, actual)
 			}
@@ -433,8 +444,8 @@ func TestDecodeInto(t *testing.T) {
 		{"complex external", oneComplex, false, &runtimetest.ExternalComplex{}, &runtimetest.ExternalComplex{TypeMeta: complexv1Meta, String: "bar"}, false},
 		{"defaulted complex external", oneComplex, true, &runtimetest.ExternalComplex{}, &runtimetest.ExternalComplex{TypeMeta: complexv1Meta, String: "bar", Integer64: 5}, false},
 		{"defaulted complex internal", oneComplex, true, &runtimetest.InternalComplex{}, &runtimetest.InternalComplex{String: "bar", Integer64: 5}, false},
-		{"decode unknown obj into unknown", unrecognizedGVK, false, &runtime.Unknown{}, newUnknown(unknownMeta, unrecognizedGVK), false},
-		{"decode known obj into unknown", oneComplex, false, &runtime.Unknown{}, newUnknown(complexv1Meta, oneComplex), false},
+		{"decode unknown obj into unknown", unrecognizedGVK, false, &runtime.Unknown{}, newUnknown(unknownMeta, bytes.TrimPrefix(unrecognizedGVK, yamlSep)), false},
+		{"decode known obj into unknown", oneComplex, false, &runtime.Unknown{}, newUnknown(complexv1Meta, bytes.TrimPrefix(oneComplex, yamlSep)), false},
 		{"no unknown fields", simpleUnknownField, false, &runtimetest.InternalSimple{}, nil, true},
 		{"no duplicate fields", simpleDuplicateField, false, &runtimetest.InternalSimple{}, nil, true},
 		{"no unrecognized API version", unrecognizedVersion, false, &runtimetest.InternalSimple{}, nil, true},
@@ -445,7 +456,7 @@ func TestDecodeInto(t *testing.T) {
 
 			actual := ourserializer.Decoder(
 				WithDefaultsDecode(rt.doDefaulting),
-			).DecodeInto(NewYAMLFrameReader(FromBytes(rt.data)), rt.obj)
+			).DecodeInto(frame.NewYAMLReader(frame.FromBytes(rt.data)), rt.obj)
 			if (actual != nil) != rt.expectedErr {
 				t2.Errorf("expected error %t but actual %t: %v", rt.expectedErr, actual != nil, actual)
 			}
@@ -486,7 +497,7 @@ func TestDecodeAll(t *testing.T) {
 			objs, actual := ourserializer.Decoder(
 				WithDefaultsDecode(rt.doDefaulting),
 				WithListElementsDecoding(rt.listSplit),
-			).DecodeAll(NewYAMLFrameReader(FromBytes(rt.data)))
+			).DecodeAll(frame.NewYAMLReader(frame.FromBytes(rt.data)))
 			if (actual != nil) != rt.expectedErr {
 				t2.Errorf("expected error %t but actual %t: %v", rt.expectedErr, actual != nil, actual)
 			}
@@ -519,7 +530,7 @@ func TestDecodeUnknown(t *testing.T) {
 		expected    runtime.Object
 		expectedErr bool
 	}{
-		{"Decode unrecognized kinds into runtime.Unknown", unrecognizedGVK, true, newUnknown(unknownMeta, unrecognizedGVK), false},
+		{"Decode unrecognized kinds into runtime.Unknown", unrecognizedGVK, true, newUnknown(unknownMeta, bytes.TrimPrefix(unrecognizedGVK, yamlSep)), false},
 		{"Decode known kinds into known structs", oneComplex, true, &runtimetest.ExternalComplex{TypeMeta: complexv1Meta, String: "bar"}, false},
 		{"No support for unrecognized", unrecognizedGVK, false, nil, true},
 	}
@@ -528,7 +539,7 @@ func TestDecodeUnknown(t *testing.T) {
 		t.Run(rt.name, func(t2 *testing.T) {
 			obj, actual := ourserializer.Decoder(
 				WithUnknownDecode(rt.unknown),
-			).Decode(NewYAMLFrameReader(FromBytes(rt.data)))
+			).Decode(frame.NewYAMLReader(frame.FromBytes(rt.data)))
 			if (actual != nil) != rt.expectedErr {
 				t2.Errorf("expected error %t but actual %t: %v", rt.expectedErr, actual != nil, actual)
 			}
@@ -543,15 +554,15 @@ func TestRoundtrip(t *testing.T) {
 	tests := []struct {
 		name string
 		data []byte
-		ct   ContentType
+		ct   frame.FramingType
 		gv   *schema.GroupVersion // use a specific groupversion if set. if nil, then use the default Encode
 	}{
-		{"simple yaml", oneSimple, ContentTypeYAML, nil},
-		{"complex yaml", oneComplex, ContentTypeYAML, nil},
-		{"simple json", simpleJSON, ContentTypeJSON, nil},
-		{"complex json", complexJSON, ContentTypeJSON, nil},
-		{"crd with objectmeta & comments", oldCRD, ContentTypeYAML, &ext1gv}, // encode as v1alpha1
-		{"unknown object", unrecognizedGVK, ContentTypeYAML, nil},
+		{"simple yaml", oneSimple, frame.FramingTypeYAML, nil},
+		{"complex yaml", oneComplex, frame.FramingTypeYAML, nil},
+		{"simple json", simpleJSON, frame.FramingTypeJSON, nil},
+		{"complex json", complexJSON, frame.FramingTypeJSON, nil},
+		{"crd with objectmeta & comments", oldCRD, frame.FramingTypeYAML, &ext1gv}, // encode as v1alpha1
+		{"unknown object", unrecognizedGVK, frame.FramingTypeYAML, nil},
 		// TODO: Maybe an unit test (case) for a type with ObjectMeta embedded as a pointer being nil
 		// TODO: Make sure that the Encode call (with comments support) doesn't mutate the object state
 		// i.e. doesn't remove the annotation after use so multiple similar encode calls work.
@@ -563,16 +574,16 @@ func TestRoundtrip(t *testing.T) {
 				WithConvertToHubDecode(true),
 				WithCommentsDecode(true),
 				WithUnknownDecode(true),
-			).Decode(NewYAMLFrameReader(FromBytes(rt.data)))
+			).Decode(frame.NewYAMLReader(frame.FromBytes(rt.data)))
 			if err != nil {
 				t2.Errorf("unexpected decode error: %v", err)
 				return
 			}
 			buf := new(bytes.Buffer)
 			if rt.gv == nil {
-				err = defaultEncoder.Encode(NewFrameWriter(rt.ct, buf), obj)
+				err = defaultEncoder.Encode(frame.NewWriter(rt.ct, buf), obj)
 			} else {
-				err = defaultEncoder.EncodeForGroupVersion(NewFrameWriter(rt.ct, buf), obj, *rt.gv)
+				err = defaultEncoder.EncodeForGroupVersion(frame.NewWriter(rt.ct, buf), obj, *rt.gv)
 			}
 			actual := buf.Bytes()
 			if err != nil {
@@ -684,13 +695,13 @@ testString: bar
 func TestListRoundtrip(t *testing.T) {
 	objs, err := ourserializer.Decoder(
 		WithCommentsDecode(true),
-	).DecodeAll(NewYAMLFrameReader(FromBytes(testList)))
+	).DecodeAll(frame.NewYAMLReader(frame.FromBytes(testList)))
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	buf := new(bytes.Buffer)
-	if err := defaultEncoder.Encode(NewFrameWriter(ContentTypeYAML, buf), objs...); err != nil {
+	if err := defaultEncoder.Encode(frame.NewWriter(frame.FramingTypeYAML, buf), objs...); err != nil {
 		t.Fatal(err)
 	}
 	actual := buf.Bytes()
